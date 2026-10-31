@@ -172,8 +172,10 @@ Toda la documentación ejecutiva y técnica de sustentación se encuentra organi
 | Documento | Descripción |
 | --- | --- |
 | [`DOCUMENTO_TECNICO_TERCER_CORTE.md`](file:///docs/DOCUMENTO_TECNICO_TERCER_CORTE.md) | **Documento Técnico Oficial del Tercer Corte:** Arquitectura, Ruta A, módulo de visión multimodal, benchmark y respuestas de sustentación (Máx. 10 págs). |
+| [`LIBRETO_SUSTENTACION_TERCER_CORTE.md`](file:///docs/LIBRETO_SUSTENTACION_TERCER_CORTE.md) | **Libreto Oficial de Sustentación Oral (15 Minutos):** Estructura dividida por integrantes y banco de respuestas para las 4 preguntas del docente. |
 | [`GUION_VIDEO_DEMO_TERCER_CORTE.md`](file:///docs/GUION_VIDEO_DEMO_TERCER_CORTE.md) | **Guión Oficial del Video de Demostración (8 Minutos):** Recorrido paso a paso escena por escena para grabación con OBS/Loom. |
 | [`GUIA_DESPLIEGUE_NUBE_GRATUITA.md`](file:///docs/GUIA_DESPLIEGUE_NUBE_GRATUITA.md) | **Guía Oficial de Despliegue en la Nube Gratuita:** Render, Supabase, Vercel, Dockerfile, variables de entorno y credenciales de prueba para el evaluador. |
+| [`PANEL_SUSTENTACION.html`](file:///docs/PANEL_SUSTENTACION.html) | **Panel Interactivo de Sustentación:** Dashboard visual para proyectar en clase con laboratorio de pruebas y preguntas del docente. |
 | [`REPORTE_EVALUACION_VISION_20.md`](file:///docs/REPORTE_EVALUACION_VISION_20.md) | Reporte estadístico del benchmark de 20 casos reales fotografiados con celular. |
 | [`Guia_Tercer_Corte_Desarrollo_de_Aplicaciones_Empresariales.pdf`](file:///docs/Guia_Tercer_Corte_Desarrollo_de_Aplicaciones_Empresariales.pdf) | Guía oficial del docente Wilson Castaño Galviz (26/10/2026). |
 | [`SEMANA_1_DISENO.pdf`](file:///docs/SEMANA_1_DISENO.pdf) | Documento de diseño arquitectónico y de inventario de flujos de Semana 1. |
