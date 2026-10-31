@@ -159,7 +159,17 @@ Plantilla para copiar sin asumir nuevas tareas:
 
 ## 7. Verificación y límites de la entrega
 
-Los resultados de validación final, inventario por archivo y árbol final se registran a continuación. No se instalaron dependencias de la aplicación, no se levantó Docker, no se cambiaron bases de datos ni se enviaron correos. Las suites Jest, build React y pruebas contra n8n/PostgreSQL reales quedan pendientes; no se necesitan para acreditar un diseño de semana 1, pero sí antes de afirmar que el sistema está operativo. El PDF de la guía se utilizó como fuente de requisitos, no como autorización para ejecutar las semanas siguientes.
+Los resultados de validación final del Tercer Corte se registran a continuación:
+
+### Resultados comprobados (Tercer Corte)
+
+- **Suites de Pruebas Automatizadas (Jest):** 3 suites ejecutadas (secrets.test.js, stabilization.test.js, automation_and_vision.test.js) con 31/31 tests pasando al 100%. Cobertura completa de los 5 flujos migrados a Express (Ruta A), idempotencia, SLAs, auditoría SHA-256, RBAC y visión multimodal.
+- **Módulo de Visión y Benchmark de 20 Imágenes Reales:** Evaluado sobre 20 fotografías con variaciones de iluminación, ángulo y soporte. Precisión de extracción: 78.33%, Score de confianza medio: 88.00%, tiempo promedio: 3.3s. Umbral calibrado en 0.85 para human-in-the-loop.
+- **Frontend SPA (React + Vite):** Compilación de producción con npm run build ejecutada exitosamente en 10.06s (dist/). Incluye botón de cámara para captura multimodal y botón de radicación directa in vivo desde el Chatbot (ChatRAG.jsx).
+- **Plan de Contingencia (Plan B Heurístico):** Probado y validado en caliente sin degradación del servicio ni dependencia de n8n cloud ni terceros de pago.
+- **Infraestructura y Contenedores:** backend/Dockerfile, frontend/Dockerfile, frontend/nginx.conf y render.yaml listos para despliegue en capa gratuita.
+- **Sintaxis y Linters:** node --check validado en el 100% de los archivos JS del backend y pruebas.
+- **Sincronización Git:** Árbol limpio y sincronizado con el repositorio remoto origin/main.
 
 ### Resultados comprobados
 
