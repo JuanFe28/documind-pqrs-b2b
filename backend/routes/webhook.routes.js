@@ -20,3 +20,4 @@ router.post('/actualizar-ticket', actualizarPqrsController);
 router.post('/calificar-ticket', calificarPqrsController);
 
 export default router;
+

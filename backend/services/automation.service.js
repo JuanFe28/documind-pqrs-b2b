@@ -691,3 +691,4 @@ export async function consultarLogsEjecuciones({ flujo, estado, limit = 50, offs
     logs: rows || [],
   };
 }
+

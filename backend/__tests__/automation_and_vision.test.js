@@ -1,6 +1,7 @@
 import request from 'supertest';
 import app from '../app.js';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import {
   evaluarSla,
   clasificarDepartamento,
@@ -148,6 +149,36 @@ describe('Motor de Automatización Nativo en Código (Ruta A) y Visión Multimod
       expect(res.body).toHaveProperty('score_confianza');
       expect(res.body).toHaveProperty('datos_extraidos');
       expect(res.body.datos_extraidos).toHaveProperty('tipo_solicitud');
+    });
+
+    test('Endpoint POST /api/chat/multimodal exige autenticación JWT', async () => {
+      const res = await request(app)
+        .post('/api/chat/multimodal');
+
+      expect(res.status).toBe(401);
+    });
+
+    test('Endpoint POST /api/chat/multimodal procesa imagen adjunta y devuelve respuesta conversacional y datos_vision', async () => {
+      const secret = process.env.JWT_SECRET || 'test_jwt_secret_documind_2026';
+      const authToken = jwt.sign(
+        { id: 10, nombre: 'Analista QA', email: 'analista@documind.com', rol: 'AGENTE' },
+        secret
+      );
+
+      const fakeBuffer = Buffer.from('Formulario de soporte técnico solicitando cambio de servidor por calentamiento.');
+
+      const res = await request(app)
+        .post('/api/chat/multimodal')
+        .set('Authorization', `Bearer ${authToken}`)
+        .field('query', '¿Cuál es la prioridad de esta novedad?')
+        .attach('archivo', fakeBuffer, { filename: 'soporte_servidor.jpg', contentType: 'image/jpeg' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.ok).toBe(true);
+      expect(res.body).toHaveProperty('respuesta');
+      expect(res.body).toHaveProperty('datos_vision');
+      expect(res.body.datos_vision).toHaveProperty('score_confianza');
+      expect(res.body.datos_vision).toHaveProperty('datos_extraidos');
     });
   });
 

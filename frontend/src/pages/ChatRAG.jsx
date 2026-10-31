@@ -1,7 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Send, FileText, Bot, User, Loader2, MessageSquare, Trash2, AlertCircle, Filter, Plus, MessageCircle, Eye, X } from 'lucide-react';
-import { chatAPI, repositoriesAPI } from '../services/api';
+import {
+  Send,
+  FileText,
+  Bot,
+  User,
+  Loader2,
+  MessageSquare,
+  Trash2,
+  AlertCircle,
+  Filter,
+  Plus,
+  MessageCircle,
+  Eye,
+  X,
+  Camera,
+  CheckCircle2,
+  Sparkles,
+  Paperclip,
+} from 'lucide-react';
+import { chatAPI, repositoriesAPI, automationAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 function TypingIndicator() {
@@ -23,12 +41,17 @@ function TypingIndicator() {
   );
 }
 
-function MensajeUsuario({ texto, nombre }) {
+function MensajeUsuario({ texto, nombre, imagen }) {
   return (
     <div className="flex items-start justify-end gap-3 animate-slide-right">
       <div className="bg-indigo-600 text-white p-4 rounded-2xl rounded-tr-none shadow-sm max-w-xl">
         <p className="font-semibold mb-1 text-indigo-200 text-xs">{nombre} (Analista)</p>
-        <p className="text-sm leading-relaxed">{texto}</p>
+        {imagen && (
+          <div className="mb-2.5 rounded-xl overflow-hidden border border-indigo-400/50 bg-black/15 max-h-56">
+            <img src={imagen} alt="Adjunto de visión" className="w-full h-auto object-contain max-h-56" />
+          </div>
+        )}
+        <p className="text-sm leading-relaxed whitespace-pre-wrap">{texto}</p>
       </div>
       <div className="bg-indigo-100 p-2 rounded-full flex-shrink-0">
         <User className="text-indigo-600 w-5 h-5" />
@@ -37,17 +60,118 @@ function MensajeUsuario({ texto, nombre }) {
   );
 }
 
-function MensajeIA({ respuesta, fuentes, onViewDoc }) {
+function MensajeIA({ respuesta, fuentes, datos_vision, onRadicarTicket, onViewDoc }) {
+  const [radicando, setRadicando] = useState(false);
+  const [resultadoRadicacion, setResultadoRadicacion] = useState(null);
+  const [errorRadicacion, setErrorRadicacion] = useState(null);
+
+  const handleRadicarClick = async () => {
+    if (!datos_vision || radicando || resultadoRadicacion) return;
+    setRadicando(true);
+    setErrorRadicacion(null);
+    try {
+      const res = await onRadicarTicket(datos_vision);
+      setResultadoRadicacion(res);
+    } catch (err) {
+      setErrorRadicacion(err.response?.data?.mensaje || err.message || 'No se pudo radicar la solicitud.');
+    } finally {
+      setRadicando(false);
+    }
+  };
+
+  const scorePct = datos_vision?.score_confianza ? Math.round(datos_vision.score_confianza * 100) : null;
+  const esConfiable = datos_vision && !datos_vision.requiere_revision_humana && (datos_vision.score_confianza >= 0.85);
+
   return (
     <div className="flex items-start justify-start gap-3 animate-slide-left">
       <div className="bg-indigo-50/50 p-2 rounded-full border border-indigo-100 flex-shrink-0">
         <Bot className="text-indigo-600 w-5 h-5" />
       </div>
       <div className="bg-white border border-slate-100 p-5 rounded-2xl rounded-tl-none shadow-sm max-w-2xl w-full">
-        <p className="font-bold text-indigo-700 mb-3 text-xs">🤖 DocuMind Gemini Engine</p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="font-bold text-indigo-700 text-xs flex items-center gap-1.5">
+            <span>🤖 DocuMind Gemini Engine</span>
+            {datos_vision && (
+              <span className="bg-purple-100 text-purple-700 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-purple-200">
+                IA Multimodal de Visión
+              </span>
+            )}
+          </p>
+          {scorePct !== null && (
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+              esConfiable 
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                : 'bg-amber-50 text-amber-700 border-amber-200'
+            }`}>
+              {esConfiable ? '✓ Confianza' : '⚠️ Revisar'} {scorePct}%
+            </span>
+          )}
+        </div>
+
         <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
           {respuesta}
         </div>
+
+        {/* Tarjeta de Acción Interactiva para Visión: Radicar directamente en PQRS */}
+        {datos_vision && (
+          <div className="mt-4 p-4 rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-50/40 via-white to-purple-50/30">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                Automatización PQRS (Ruta A)
+              </span>
+              <span className="text-[11px] text-slate-500 font-mono">
+                {datos_vision.datos_extraidos?.tipo_solicitud} · {datos_vision.datos_extraidos?.prioridad_sugerida}
+              </span>
+            </div>
+
+            {resultadoRadicacion ? (
+              <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 space-y-1 animate-fade-in">
+                <div className="flex items-center gap-1.5 font-bold text-emerald-900">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  ¡Solicitud radicada con éxito en el sistema!
+                </div>
+                <div className="grid grid-cols-2 gap-1 pt-1 font-mono text-[11px]">
+                  <div>Radicado: <strong>{resultadoRadicacion.ticket_id}</strong></div>
+                  <div>SLA: <strong>{resultadoRadicacion.sla_horas}h</strong></div>
+                  <div className="col-span-2 truncate">Token: {resultadoRadicacion.tracking_token}</div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                <p className="text-[11px] text-slate-500">
+                  {esConfiable 
+                    ? '¿Desea crear el requerimiento oficial con estos datos extraídos?' 
+                    : 'Revise los campos dudosos y confirme para registrar el caso.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleRadicarClick}
+                  disabled={radicando}
+                  className="btn-primary text-xs px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm whitespace-nowrap disabled:opacity-60"
+                >
+                  {radicando ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Radicando...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      Radicar en PQRS
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {errorRadicacion && (
+              <p className="text-[11px] text-rose-600 mt-2 font-medium">
+                ⚠️ {errorRadicacion}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Caja de citación obligatoria */}
         {fuentes && fuentes.length > 0 && (
@@ -91,7 +215,7 @@ function MensajeIA({ respuesta, fuentes, onViewDoc }) {
 
 const MENSAJE_BIENVENIDA = {
   tipo: 'ia',
-  respuesta: `¡Hola! Soy **DocuMind**, tu asistente conversacional y motor de análisis documental inteligente. 🤖\n\nPuedo responder preguntas, realizar comparaciones profundas entre documentos, resolver radicados de PQRS y analizar contratos o normativas.\n\nPrueba preguntarme:\n\n• 📊 **Comparación:** *"Compara el contrato de outsourcing IT con el de soporte hosting"*\n• ⚖️ **Auditoría Legal:** *"Compara el contrato de papelería con el de seguridad privada"*\n• 💡 **Resolución PQRS:** *"¿Cómo resolver una queja de lentitud o garantía según las políticas corporativas?"*\n\n*Nota: Respondo con citas exactas y trazabilidad a los documentos indexados en el sistema.*`,
+  respuesta: `¡Hola! Soy **DocuMind**, tu asistente conversacional con inteligencia documental y **visión multimodal**. 🤖📸\n\nPuedo responder preguntas, comparar contratos, resolver dudas normativas y **procesar imágenes de formularios físicos o evidencias de novedades** directamente desde esta conversación.\n\nPrueba:\n\n• 📷 **Visión Multimodal:** Adjunta la foto de un formulario físico o novedad con el botón 📎 y te extraeré los campos con opción de radicación inmediata en PQRS.\n• 📊 **Comparación:** *"Compara el contrato de outsourcing IT con el de soporte hosting"*\n• 💡 **Resolución PQRS:** *"¿Cómo resolver un requerimiento de facturación duplicada según los manuales?"*\n\n*Nota: Respondo con citas a documentos y datos estructurados verificados.*`,
   fuentes: [],
 };
 
@@ -112,6 +236,49 @@ export default function ChatRAG({ selectedRepo }) {
   const [threads, setThreads] = useState([]);
   const [activeThreadId, setActiveThreadId] = useState(null);
   const [loadingThreads, setLoadingThreads] = useState(false);
+
+  // Soporte para visión multimodal en chat
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      setError('La imagen excede el límite de 15 MB.');
+      return;
+    }
+    setSelectedImage(file);
+    const url = URL.createObjectURL(file);
+    setImagePreviewUrl(url);
+    setError('');
+  };
+
+  const handleRemoveImage = () => {
+    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    setSelectedImage(null);
+    setImagePreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleRadicarTicket = async (datosVision) => {
+    const d = datosVision.datos_extraidos || {};
+    const payload = {
+      request_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'req-' + Date.now(),
+      nombre: d.nombre_solicitante || 'Ciudadano Anónimo',
+      email: d.email_solicitante || 'contacto@empresa.com',
+      telefono: d.telefono_solicitante || '',
+      tipo_solicitud: d.tipo_solicitud || 'Petición',
+      prioridad: d.prioridad_sugerida || 'Media',
+      area: d.area_sugerida || 'Soporte Técnico y Sistemas',
+      asunto: d.asunto || 'Requerimiento digitalizado por Visión IA',
+      descripcion: d.descripcion || 'Digitalización y radicación directa desde Chatbot',
+    };
+
+    const res = await automationAPI.radicar(payload);
+    return res.data;
+  };
   
   // Visor de documentos con ciclo de vida seguro de Object URL
   const [docViewerUrl, setDocViewerUrl] = useState(null);
@@ -251,12 +418,25 @@ export default function ChatRAG({ selectedRepo }) {
 
   const handleSend = async (overrideQuery = null, overrideRepoId = null) => {
     const query = overrideQuery || inputText.trim();
-    if (!query || loading) return;
+    if ((!query && !selectedImage) || loading) return;
+
+    const currentImage = selectedImage;
+    const currentPreview = imagePreviewUrl;
 
     setInputText('');
+    setSelectedImage(null);
+    setImagePreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
     setError('');
 
-    setMensajes((prev) => [...prev, { tipo: 'usuario', texto: query }]);
+    setMensajes((prev) => [
+      ...prev,
+      {
+        tipo: 'usuario',
+        texto: query || 'Foto de formulario físico o evidencia adjunta para digitalización',
+        imagen: currentPreview,
+      },
+    ]);
     setLoading(true);
 
     const effectiveRepoId = overrideRepoId !== null 
@@ -265,16 +445,39 @@ export default function ChatRAG({ selectedRepo }) {
 
     let currentThreadId = activeThreadId;
     if (!currentThreadId) {
-      currentThreadId = await createThread(query, effectiveRepoId);
+      const threadTitle = query 
+        ? (query.length > 30 ? query.substring(0, 30) + '...' : query)
+        : `Formulario ${currentImage?.name || 'Visión IA'}`;
+      currentThreadId = await createThread(threadTitle, effectiveRepoId);
     }
 
     try {
-      const res = await chatAPI.query(query, effectiveRepoId, currentThreadId);
-      const { respuesta, fuentes_citadas } = res.data;
+      if (currentImage) {
+        const formData = new FormData();
+        formData.append('archivo', currentImage);
+        formData.append('query', query || '');
+        if (currentThreadId) formData.append('thread_id', currentThreadId);
 
-      setMensajes((prev) => [...prev, { tipo: 'ia', respuesta, fuentes: fuentes_citadas }]);
+        const res = await chatAPI.queryMultimodal(formData);
+        const { respuesta, fuentes_citadas, datos_vision } = res.data;
+
+        setMensajes((prev) => [
+          ...prev,
+          {
+            tipo: 'ia',
+            respuesta,
+            fuentes: fuentes_citadas || [],
+            datos_vision,
+          },
+        ]);
+      } else {
+        const res = await chatAPI.query(query, effectiveRepoId, currentThreadId);
+        const { respuesta, fuentes_citadas } = res.data;
+
+        setMensajes((prev) => [...prev, { tipo: 'ia', respuesta, fuentes: fuentes_citadas }]);
+      }
     } catch (err) {
-      const msg = err.response?.data?.mensaje || 'Error en el motor RAG. Intenta nuevamente.';
+      const msg = err.response?.data?.mensaje || 'Error en el motor RAG / Visión. Intenta nuevamente.';
       setError(msg);
       setMensajes((prev) => [
         ...prev,
@@ -425,12 +628,19 @@ export default function ChatRAG({ selectedRepo }) {
         <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
           {mensajes.map((msg, i) =>
             msg.tipo === 'usuario' ? (
-              <MensajeUsuario key={i} texto={msg.texto} nombre={user?.nombre || 'Usuario'} />
+              <MensajeUsuario 
+                key={i} 
+                texto={msg.texto} 
+                nombre={user?.nombre || 'Usuario'} 
+                imagen={msg.imagen}
+              />
             ) : (
               <MensajeIA 
                 key={i} 
                 respuesta={msg.respuesta} 
                 fuentes={msg.fuentes} 
+                datos_vision={msg.datos_vision}
+                onRadicarTicket={handleRadicarTicket}
                 onViewDoc={(url, title) => {
                   console.log('[DocViewer] url_descarga recibida:', url, '| archivo:', title);
                   setDocViewerUrl(url);
@@ -471,8 +681,50 @@ export default function ChatRAG({ selectedRepo }) {
               {error}
             </div>
           )}
-          <div className="flex gap-3 bg-slate-50 border border-slate-200 rounded-2xl p-2 focus-within:border-indigo-300 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
-            <div className="flex items-center pl-2 text-slate-400">
+
+          {/* Chip de previsualización de imagen adjunta */}
+          {selectedImage && (
+            <div className="mb-2 flex items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2 w-fit animate-fade-in shadow-sm">
+              <div className="w-10 h-10 rounded-lg overflow-hidden border border-indigo-300 bg-white flex-shrink-0">
+                <img src={imagePreviewUrl} alt="Preview" className="w-full h-full object-cover" />
+              </div>
+              <div className="text-xs">
+                <p className="font-semibold text-indigo-900 truncate max-w-xs">{selectedImage.name}</p>
+                <p className="text-[10px] text-indigo-600 font-mono">
+                  {(selectedImage.size / 1024).toFixed(0)} KB · Formulario / Evidencia Física
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleRemoveImage}
+                className="p-1 hover:bg-indigo-200 text-indigo-700 rounded-full transition-colors ml-1"
+                title="Quitar imagen"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          <div className="flex gap-3 bg-slate-50 border border-slate-200 rounded-2xl p-2 focus-within:border-indigo-300 focus-within:ring-2 focus-within:ring-indigo-100 transition-all items-center">
+            {/* Botón de carga de fotos para Visión Multimodal */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors flex-shrink-0"
+              title="Adjuntar foto de formulario físico o evidencia (Visión Multimodal)"
+              disabled={loading}
+            >
+              <Camera className="w-5 h-5" />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,.pdf"
+              className="hidden"
+              onChange={handleImageSelect}
+            />
+
+            <div className="flex items-center text-slate-400">
               <MessageSquare className="w-4 h-4" />
             </div>
             <textarea
@@ -480,7 +732,11 @@ export default function ChatRAG({ selectedRepo }) {
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Escriba su consulta aquí (ej: '¿Cuáles son las cláusulas penales del contrato?' o 'Hola')..."
+              placeholder={
+                selectedImage 
+                  ? "Escriba una pregunta sobre la imagen o presione Enter para digitalizar..." 
+                  : "Escriba su consulta o adjunte una foto de formulario con el icono de cámara..."
+              }
               rows={1}
               disabled={loading}
               className="flex-1 bg-transparent resize-none border-none outline-none text-sm text-slate-700 placeholder-slate-400 py-1.5"
@@ -488,7 +744,7 @@ export default function ChatRAG({ selectedRepo }) {
             <button
               id="btn-enviar-chat"
               onClick={() => handleSend()}
-              disabled={!inputText.trim() || loading}
+              disabled={(!inputText.trim() && !selectedImage) || loading}
               className="btn-primary p-2.5 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
               title="Enviar mensaje (Enter)"
             >

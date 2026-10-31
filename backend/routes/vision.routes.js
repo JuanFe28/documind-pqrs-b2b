@@ -46,3 +46,4 @@ const upload = multer({
 router.post('/procesar-formulario', verificarTokenOpcional, upload.single('archivo'), procesarFormularioController);
 
 export default router;
+

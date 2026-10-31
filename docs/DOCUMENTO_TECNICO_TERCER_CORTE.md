@@ -137,7 +137,9 @@ flowchart TD
 ### 4.3. Calibración del Umbral y Human-in-the-Loop
 Para garantizar la integridad de los datos en concordancia con los requerimientos académicos:
 - **Umbral de Calidad:** Si el `score_confianza < 0.85` o si campos obligatorios (`nombre`, `email`, `asunto`, `descripcion`) no superan la certeza requerida, el sistema marca `requiere_revision_humana: true`.
-- **Experiencia de Usuario:** La interfaz en React (`/vision`) presenta la imagen capturada en paralelo con un formulario prellenado y tarjetas de advertencia que resaltan los campos dudosos para que el usuario o funcionario los rectifique antes de radicar.
+- **Canales de Captura y Experiencia de Usuario:**
+  1. **Portal Dedicado (`/vision`):** Pantalla especializada con captura desde la cámara del celular o subida de archivos, previsualización en paralelo, tarjeta de advertencia interactiva y prellenado editable antes del envío.
+  2. **Chatbot Conversacional Multimodal (`/chat`):** Canal interactivo (`POST /api/chat/multimodal`) donde el funcionario adjunta la foto de la novedad o formulario directamente en el chat mediante el botón de cámara. DocuMind analiza la imagen, presenta una tabla de extracción con nivel de certeza e incluye una tarjeta con el botón **"⚡ Radicar en PQRS"** para disparar la automatización nativa sin salir de la conversación.
 
 ### 4.4. Plan B de Contingencia (Agotamiento de Cuota y Fallos de Red)
 En cumplimiento del requisito transversal de control de costos y límites:
@@ -267,3 +269,4 @@ A continuación se sintetizan las respuestas a las cuatro preguntas obligatorias
 ## 10. Conclusiones
 
 La implementación del Tercer Corte demostró que es viable prescindir de plataformas de automatización no-code de pago mediante una arquitectura en código limpia, desacoplada y auditable. La integración de IA multimodal con un enfoque conservador de seguridad (umbral de confianza del 85% y contingencia local) dota a la organización de una herramienta de digitalización ágil y robusta para sus procesos B2B, cumpliendo a cabalidad con la legislación colombiana de protección de datos y los estándares exigidos por las Unidades Tecnológicas de Santander.
+

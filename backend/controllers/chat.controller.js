@@ -1,6 +1,8 @@
+import fs from 'fs';
 import { GoogleGenAI } from '@google/genai';
 import { generarEmbeddingGoogle } from '../services/gemini.service.js';
 import { queryVectores } from '../services/pinecone.service.js';
+import { procesarFormularioConVision } from '../services/vision.service.js';
 import db from '../config/db.js';
 import { getSecret } from '../utils/secrets.js';
 
@@ -445,5 +447,111 @@ export async function eliminarThread(req, res) {
   } catch (error) {
     console.error(error);
     res.status(500).json({ ok: false, mensaje: 'Error al eliminar hilo.' });
+  }
+}
+
+/**
+ * POST /api/chat/multimodal
+ * Procesa una imagen o evidencia física dentro del Chatbot conversacional
+ * con el módulo de Visión Multimodal (Gemini + Plan B), retornando interpretación
+ * estructurada y habilitando el disparo directo a radicación PQRS.
+ */
+export async function consultarChatConImagen(req, res) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ ok: false, mensaje: 'Debe adjuntar una imagen o formulario escaneado.' });
+    }
+
+    const { query, thread_id } = req.body;
+    const usuarioId = req.user?.email || req.user?.nombre || 'USUARIO_CHAT';
+    const file = req.file;
+    const fileBuffer = fs.readFileSync(file.path);
+
+    const resultadoVision = await procesarFormularioConVision(
+      fileBuffer,
+      file.mimetype,
+      file.originalname,
+      usuarioId
+    );
+
+    const d = resultadoVision.datos_extraidos;
+    const confianzaPct = Math.round((resultadoVision.score_confianza || 0.75) * 100);
+    const requiereRevision = resultadoVision.requiere_revision_humana;
+
+    let respuestaTexto = `### 📸 Análisis Multimodal de Formulario / Novedad Física\n\n`;
+    respuestaTexto += `He procesado el archivo adjunto **${file.originalname}** mediante **${resultadoVision.modelo_utilizado}**.\n\n`;
+    respuestaTexto += `| Campo Extraído | Valor Detectado |\n`;
+    respuestaTexto += `|---|---|\n`;
+    respuestaTexto += `| **Solicitante** | ${d.nombre_solicitante || 'No detectado'} |\n`;
+    respuestaTexto += `| **Correo Electrónico** | ${d.email_solicitante || 'No detectado'} |\n`;
+    respuestaTexto += `| **Teléfono** | ${d.telefono_solicitante || 'No detectado'} |\n`;
+    respuestaTexto += `| **Tipo de Solicitud** | **${d.tipo_solicitud}** |\n`;
+    respuestaTexto += `| **Prioridad Sugerida** | **${d.prioridad_sugerida}** |\n`;
+    respuestaTexto += `| **Área Responsable** | ${d.area_sugerida} |\n`;
+    respuestaTexto += `| **Asunto** | ${d.asunto} |\n`;
+    respuestaTexto += `| **Nivel de Confianza IA** | **${confianzaPct}%** (${resultadoVision.score_confianza.toFixed(2)}) |\n\n`;
+
+    respuestaTexto += `**Descripción extraída:**\n> "${d.descripcion}"\n\n`;
+
+    if (requiereRevision) {
+      respuestaTexto += `⚠️ **Revisión Humana Sugerida:** La certeza calculada es inferior al 85% o se detectaron observaciones en el documento:\n`;
+      if (resultadoVision.advertencias && resultadoVision.advertencias.length > 0) {
+        resultadoVision.advertencias.forEach(adv => {
+          respuestaTexto += `- *${adv}*\n`;
+        });
+      } else {
+        respuestaTexto += `- *Se recomienda verificar nombre y datos de contacto antes de radicar.*\n`;
+      }
+      respuestaTexto += `\n`;
+    } else {
+      respuestaTexto += `✅ **Extracción Confiable:** La información cumple los criterios de calidad para radicación automática en PQRS.\n\n`;
+    }
+
+    if (query && query.trim().length > 0 && !query.toLowerCase().includes('analiza y digitaliza')) {
+      respuestaTexto += `#### 💡 Respuesta a su consulta sobre el documento:\n`;
+      respuestaTexto += `En relación con su consulta (*"${query}"*), los datos confirman un requerimiento de **${d.tipo_solicitud}** de prioridad **${d.prioridad_sugerida}** que debe ser atendido por el área de **${d.area_sugerida}**.\n`;
+    }
+
+    // Persistir en base de datos si hay thread activo
+    if (thread_id) {
+      try {
+        const textoUser = query && query.trim().length > 0 ? query : `[Imagen adjunta: ${file.originalname}]`;
+        await db.query(
+          'INSERT INTO chat_messages (thread_id, rol, contenido) VALUES (?, ?, ?)',
+          [thread_id, 'user', textoUser]
+        );
+        await db.query(
+          'INSERT INTO chat_messages (thread_id, rol, contenido, fuentes) VALUES (?, ?, ?, ?)',
+          [thread_id, 'ia', respuestaTexto, JSON.stringify([])]
+        );
+      } catch (dbErr) {
+        console.warn('[Chat Multimodal] Advertencia al persistir mensaje en BD:', dbErr.message);
+      }
+    }
+
+    // Limpiar archivo temporal subido
+    try {
+      fs.unlinkSync(file.path);
+    } catch (_) {}
+
+    return res.status(200).json({
+      ok: true,
+      respuesta: respuestaTexto,
+      fuentes_citadas: [],
+      datos_vision: {
+        ...resultadoVision,
+        archivo: {
+          nombre: file.originalname,
+          tamano_bytes: file.size,
+          mimetype: file.mimetype,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Error en consultarChatConImagen:', error);
+    return res.status(500).json({
+      ok: false,
+      mensaje: 'Error procesando la imagen en el chatbot: ' + error.message,
+    });
   }
 }

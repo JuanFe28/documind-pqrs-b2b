@@ -51,10 +51,32 @@ export const documentsAPI = {
 export const chatAPI = {
   query: (query, repositorio_id, thread_id) =>
     api.post('/chat/query', { query, repositorio_id: repositorio_id || undefined, thread_id }),
+  queryMultimodal: (formData) =>
+    api.post('/chat/multimodal', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
   getThreads: (repositorio_id) => api.get('/chat/threads', { params: { repositorio_id } }),
   createThread: (titulo, repositorio_id) => api.post('/chat/threads', { titulo, repositorio_id }),
   getMessages: (threadId) => api.get(`/chat/threads/${threadId}/messages`),
   deleteThread: (threadId) => api.delete(`/chat/threads/${threadId}`),
+};
+
+// ─── Visión por Computador e IA Multimodal ────────────────────────────────────
+export const visionAPI = {
+  procesarFormulario: (formData) =>
+    api.post('/vision/procesar-formulario', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+};
+
+// ─── Automatización Nativa PQRS (Ruta A) ──────────────────────────────────────
+export const automationAPI = {
+  radicar: (data) => api.post('/pqrs/radicar', data),
+  consultar: (params) => api.get('/pqrs/consultar', { params }),
+  tracking: (ticketId, token) => api.get(`/pqrs/${ticketId}/tracking`, { params: { token } }),
+  actualizar: (ticketId, data) => api.post(`/pqrs/${ticketId}/actualizar`, data),
+  calificar: (ticketId, data) => api.post(`/pqrs/${ticketId}/calificar`, data),
+  logs: () => api.get('/pqrs/logs'),
 };
 
 // ─── Repositories ────────────────────────────────────────────────────────────

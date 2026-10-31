@@ -193,3 +193,4 @@ ejecutarBenchmark20Imagenes().catch((err) => {
   console.error('Error fatal al ejecutar benchmark:', err);
   process.exit(1);
 });
+
