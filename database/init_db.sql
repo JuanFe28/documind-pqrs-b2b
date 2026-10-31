@@ -216,6 +216,22 @@ DO $$ BEGIN
  END IF;
 END $$;
 
+-- 10. Tabla de Auditoría del Motor de Automatización en Código (Semana 2 - Tercer Corte)
+CREATE TABLE IF NOT EXISTS pqrs_logs_ejecuciones (
+    id SERIAL PRIMARY KEY,
+    flujo VARCHAR(60) NOT NULL,
+    disparador VARCHAR(120) NOT NULL,
+    actor VARCHAR(180) DEFAULT 'ANONIMO',
+    estado VARCHAR(20) NOT NULL, -- 'EXITO', 'ERROR', 'REINTENTO'
+    datos_entrada JSONB,
+    datos_salida JSONB,
+    mensaje_error TEXT,
+    tiempo_ms INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pqrs_logs_flujo ON pqrs_logs_ejecuciones(flujo);
+CREATE INDEX IF NOT EXISTS idx_pqrs_logs_fecha ON pqrs_logs_ejecuciones(created_at DESC);
+
 -- Agentes de ejemplo del proyecto original. Son responsables de notas, no cuentas de acceso.
 INSERT INTO usuarios_agentes(id,nombre,email,departamento,rol) VALUES
 ('a0000000-0000-0000-0000-000000000001','Andrea Silva','andrea@example.com','Soporte Técnico y Sistemas','SUPERVISOR'),
@@ -249,7 +265,11 @@ BEGIN
  p->>'departamento',p->>'asunto',p->>'descripcion','NUEVO',urgente,horas,NOW()+make_interval(hours=>horas),'ENVIANDO',CASE WHEN urgente THEN 'ENVIANDO' ELSE 'NO_APLICA' END)
  RETURNING * INTO s;
  INSERT INTO pqrs_actividades(ticket_id,autor_nombre,autor_tipo,es_nota_interna,mensaje,estado_nuevo)
- VALUES(s.ticket_id,'Sistema n8n','SISTEMA',false,'Solicitud registrada. Plazo de atención: '||horas||' horas corridas.','NUEVO');
+ VALUES(s.ticket_id,'Sistema Express PQRS','SISTEMA',false,'Solicitud registrada. Plazo de atención: '||horas||' horas corridas.','NUEVO');
+ -- Asociar documento físico si fue adjuntado previamente
+ IF (p->>'documento_id') IS NOT NULL AND (p->>'documento_id') ~ '^[0-9]+$' THEN
+  UPDATE documentos SET ticket_id = s.ticket_id WHERE id = (p->>'documento_id')::int;
+ END IF;
  RETURN jsonb_build_object('creada',true,'coincide',true,'solicitud',to_jsonb(s));
 END $$;
 
@@ -281,7 +301,7 @@ CREATE OR REPLACE FUNCTION pqrs_listar() RETURNS JSONB LANGUAGE sql STABLE AS $$
    'es_nota_interna',a.es_nota_interna,'estado_anterior',a.estado_anterior,'estado_nuevo',a.estado_nuevo) ORDER BY a.id)
    FROM pqrs_actividades a WHERE a.ticket_id=s.ticket_id),'[]'::jsonb) actividades
   FROM pqrs_solicitudes s ORDER BY s.id DESC LIMIT 100) x),'[]'::jsonb),
- 'agentes',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',id,'nombre',nombre,'departamento',departamento,'rol',rol) ORDER BY nombre)
+ 'agentes',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',id,'nombre',nombre,'email',email,'departamento',departamento,'rol',rol) ORDER BY nombre)
   FROM usuarios_agentes WHERE activo),'[]'::jsonb)) FROM pqrs_solicitudes;
 $$;
 

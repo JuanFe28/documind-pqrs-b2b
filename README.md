@@ -1,6 +1,20 @@
-# DocuMind & PQRS B2B Enterprise — Plataforma Unificada de Gestión Documental y Mesa de Ayuda con IA (RAG)
+# DocuMind & PQRS B2B Enterprise — Plataforma Unificada con Motor Propio de Automatización e IA Multimodal de Visión
 
-Sistema empresarial integral que combina la **Gestión Documental Inteligente (DocuMind)** con la **Mesa de Ayuda y Automatización de PQRS B2B**, potenciado por modelos de lenguaje de última generación (**Google Gemini**), base de datos vectorial (**Pinecone**) y orquestación de flujos de trabajo (**n8n**).
+Sistema empresarial integral que combina la **Gestión Documental Inteligente (DocuMind)** con la **Mesa de Ayuda y Automatización de PQRS B2B**, potenciado por modelos de lenguaje de última generación (**Google Gemini**), motor propio de automatización en Node.js/Express (Ruta A) y **Módulo de Visión por Computador e IA Multimodal** para digitalización de formularios físicos.
+
+## 🎓 Tercer Corte: Entrega Completa (Motor Propio + Visión Multimodal)
+
+- **Documento Técnico Oficial (Máx. 10 págs):** [`docs/DOCUMENTO_TECNICO_TERCER_CORTE.md`](docs/DOCUMENTO_TECNICO_TERCER_CORTE.md)
+- **Reporte Estadístico del Benchmark (20 Imágenes):** [`docs/REPORTE_EVALUACION_VISION_20.md`](docs/REPORTE_EVALUACION_VISION_20.md)
+- **Guía Académica Docente (Wilson Castaño Galviz):** [`docs/Guia_Tercer_Corte_Desarrollo_de_Aplicaciones_Empresariales.pdf`](docs/Guia_Tercer_Corte_Desarrollo_de_Aplicaciones_Empresariales.pdf)
+- **Diseño Semana 1:** [PDF de dos páginas](docs/SEMANA_1_DISENO.pdf) y [fuente editable](docs/SEMANA_1_DISENO.md)
+
+### Capacidades Desarrolladas en este Corte:
+1. **Componente 1 (Automatización Propia en Código - Ruta A):** Reemplazo del 100% de n8n por servicios nativos en Node.js (`backend/services/automation.service.js`) para los 5 flujos empresariales (F01 a F05), con tabla de auditoría `pqrs_logs_ejecuciones`, SLAs dinámicos (2h a 48h) e idempotencia estricta por `request_id` y `operation_id`.
+2. **Componente 2 (IA Multimodal de Visión & Human-in-the-Loop):** Procesamiento de fotos de formularios físicos y novedades tomadas con celular (`backend/services/vision.service.js`), extracción estructurada JSON y activación de revisión humana cuando `score_confianza < 0.85`.
+3. **Plan B de Contingencia Local:** Degradación elegante mediante motor heurístico local que se activa ante agotamiento de cuota de IA o fallas de red, evitando caídas de servicio (HTTP 500).
+4. **Benchmark Evaluado:** Batería automatizada sobre 20 imágenes reales (`node tests/evaluar_vision_20_imagenes.js`) con 78.33% de precisión estricta global y 88.00% de confianza promedio.
+5. **Portal de Digitalización React:** Pantalla `/vision` con carga de fotos, prellenado interactivo y radicación nativa.
 
 ## Tercer corte: semana 1
 
@@ -141,14 +155,12 @@ El proyecto cuenta con una cobertura integral de pruebas automatizadas:
 cd backend
 npm test
 
+# Benchmark automatizado de visión multimodal (20 imágenes con reporte estadístico):
+node ../tests/evaluar_vision_20_imagenes.js
+
 # Compilación y verificación de empaquetado de frontend:
 cd ../frontend
 npm run build
-```
-
-Adicionalmente, se incluye el script de integración de PQRS con el motor n8n:
-```cmd
-.\ejecutar_pruebas.bat
 ```
 
 ---
@@ -159,7 +171,11 @@ Toda la documentación ejecutiva y técnica de sustentación se encuentra organi
 
 | Documento | Descripción |
 | --- | --- |
-| [`INFORME_FINAL_ENTREGA_DOCUMIND.md`](file:///docs/INFORME_FINAL_ENTREGA_DOCUMIND.md) | Informe técnico final con arquitectura, casos de uso, matriz de seguridad y métricas. |
+| [`DOCUMENTO_TECNICO_TERCER_CORTE.md`](file:///docs/DOCUMENTO_TECNICO_TERCER_CORTE.md) | **Documento Técnico Oficial del Tercer Corte:** Arquitectura, Ruta A, módulo de visión multimodal, benchmark y respuestas de sustentación (Máx. 10 págs). |
+| [`REPORTE_EVALUACION_VISION_20.md`](file:///docs/REPORTE_EVALUACION_VISION_20.md) | Reporte estadístico del benchmark de 20 casos reales fotografiados con celular. |
+| [`Guia_Tercer_Corte_Desarrollo_de_Aplicaciones_Empresariales.pdf`](file:///docs/Guia_Tercer_Corte_Desarrollo_de_Aplicaciones_Empresariales.pdf) | Guía oficial del docente Wilson Castaño Galviz (26/10/2026). |
+| [`SEMANA_1_DISENO.pdf`](file:///docs/SEMANA_1_DISENO.pdf) | Documento de diseño arquitectónico y de inventario de flujos de Semana 1. |
+| [`INFORME_FINAL_ENTREGA_DOCUMIND.md`](file:///docs/INFORME_FINAL_ENTREGA_DOCUMIND.md) | Informe técnico con arquitectura, casos de uso, matriz de seguridad y métricas. |
 | [`RESUMEN_EJECUTIVO_DOCUMIND.md`](file:///docs/RESUMEN_EJECUTIVO_DOCUMIND.md) | Síntesis ejecutiva de alto impacto para evaluadores y jurados. |
 | [`PRESENTACION_DOCUMIND.md`](file:///docs/PRESENTACION_DOCUMIND.md) | Estructura diapositiva por diapositiva para la defensa y sustentación oral. |
 | [`GUION_DEMO_DOCUMIND.md`](file:///docs/GUION_DEMO_DOCUMIND.md) | Guión paso a paso para la demostración en vivo de la plataforma. |

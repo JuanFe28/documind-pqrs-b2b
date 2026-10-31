@@ -18,6 +18,8 @@ import chatRoutes from './routes/chat.routes.js';
 import repositoriesRoutes from './routes/repositories.routes.js';
 import logsRoutes from './routes/logs.routes.js';
 import pqrsRoutes from './routes/pqrs.routes.js';
+import webhookRoutes from './routes/webhook.routes.js';
+import visionRoutes from './routes/vision.routes.js';
 
 const app = express();
 
@@ -77,6 +79,11 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/repositories', repositoriesRoutes);
 app.use('/api/logs', logsRoutes);
 app.use('/api/pqrs', pqrsRoutes);
+app.use('/api/vision', visionRoutes);
+
+// ─── Emulación Nativa de Webhooks n8n (Ruta A) ──────────────────────────────
+// Reemplaza el 100% de los flujos de n8n en el puerto de Express para compatibilidad total
+app.use('/webhook', webhookRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

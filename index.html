@@ -1089,7 +1089,7 @@
     <div class="endpoint-bar" id="endpointConfigBar">
       <div style="display:flex; align-items:center; gap:8px;">
         <span style="color:var(--text-secondary); font-weight:600;">Endpoint n8n:</span>
-        <input type="text" id="n8nHostInput" value="http://localhost:5678" placeholder="http://localhost:5678">
+        <input type="text" id="n8nHostInput" value="http://localhost:5000" placeholder="http://localhost:5000">
         <button type="button" class="chip-btn" onclick="testConnection(true)">Verificar</button>
       </div>
       <div style="font-size:0.75rem; color:var(--text-tertiary);">
@@ -2219,6 +2219,22 @@
       const savedUpdate = leerSesion(updateKey);
       if (savedUpdate?.payload?.operation_id && uuidPattern.test(savedUpdate.payload.operation_id) && savedUpdate.base) pendingUpdate = savedUpdate;
       $('btnRetryPendingUpdate').hidden = !pendingUpdate;
+      try {
+        const rawParams = window.location.hash.replace(/^#/, '') || window.location.search.replace(/^\?/, '');
+        if (rawParams) {
+          const params = new URLSearchParams(rawParams);
+          const deepId = (params.get('id') || params.get('ticket') || params.get('ticket_id') || '').trim();
+          const deepToken = (params.get('token') || params.get('tracking_token') || '').trim();
+          if (deepId || deepToken) {
+            switchClientTab('tracking');
+            if (deepId) $('trackInput').value = deepId;
+            if (deepToken) $('trackTokenInput').value = deepToken;
+            if (deepId && deepToken) {
+              setTimeout(() => { if (typeof ejecutarTracking === 'function') ejecutarTracking(); }, 450);
+            }
+          }
+        }
+      } catch (_) {}
       await testConnection();
     });
   </script>

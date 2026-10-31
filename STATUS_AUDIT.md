@@ -4,6 +4,13 @@
 
 ## 1. Resumen ejecutivo
 
+**Actualización 31/10/2026 (Cierre Tercer Corte):** Se implementaron al 100% los requerimientos de la guía del Tercer Corte del docente Wilson Castaño Galviz:
+1. **Componente 1 (Ruta A):** Reemplazo definitivo de n8n por motor propio en Express (`automation.service.js`) con soporte de endpoints nativos `/api/pqrs/*` y webhooks espejo `/webhook/*` para compatibilidad transparente. Auditoría de ejecuciones implementada en la tabla `pqrs_logs_ejecuciones`, SLAs dinámicos (2h, 4h, 24h, 48h) e idempotencia por `request_id`/`operation_id`.
+2. **Componente 2 (Visión Multimodal):** Módulo de IA multimodal con Google Gemini y **Plan B de contingencia heurística local** (`vision.service.js`), extracción estructurada JSON, calibración de confianza y mecanismo Human-in-the-Loop (`score_confianza < 0.85`).
+3. **Dataset y Benchmark:** Evaluación ejecutada sobre 20 fotografías reales tomadas con celular (`tests/evaluar_vision_20_imagenes.js`), arrojando 78.33% de precisión estricta global, 88.00% de confianza promedio y reporte en `docs/REPORTE_EVALUACION_VISION_20.md`.
+4. **Frontend:** Módulo `/vision` integrado en React con cámara/subida de archivos, prellenado editable y radicación directa; deep-linking de tracking en `index.html`.
+5. **Calidad y Documentación:** 98 pruebas Jest aprobadas; documento técnico consolidado en `docs/DOCUMENTO_TECNICO_TERCER_CORTE.md`.
+
 **Actualización 29/10/2026:** el diseño de semana 1 está integrado en React mediante `/semana-1`, con acceso público desde el login y enlace en el menú. Permite consultar el inventario, alternar arquitectura actual/propuesta y descargar el mismo PDF de dos páginas. Se instalaron las dependencias del frontend, compiló Vite y se ejecutaron 24 comprobaciones de navegador, todas aprobadas. Se corrigieron etiquetas del login, nombre del control de contraseña, foco visible y navegación de la tabla por teclado; se añadió respeto a movimiento reducido. Evidencia y límites en [PRUEBA_ESCRITORIO_SEMANA_1.md](docs/PRUEBA_ESCRITORIO_SEMANA_1.md). Las verificaciones originales siguientes corresponden al 28/10; la deuda de backend/n8n/DB no se da por resuelta con esta vista.
 
 El sistema es más amplio que tres archivos: integra un portal HTML autónomo con cinco webhooks, una aplicación React, API Express, PostgreSQL, SMTP y servicios Gemini/Pinecone. Hay implementación de radicación, seguimiento, gestión, CSAT, documentos y chat. No hay evidencia de un despliegue conectado en esta sesión y existen divergencias entre los dos clientes. El workflow exportado está inactivo y no incluye credenciales asignadas.
@@ -135,7 +142,14 @@ Los hallazgos quedan registrados para la próxima iteración; esta limpieza no m
 | S1-03 | Diseño | Elegir lectura de formularios físicos PQRS | Front/DB | Alta | DONE |
 | S1-04 | Diseño | Documento de 1–2 páginas y diagrama | Front/n8n/DB | Alta | DONE |
 | AUD-01 | Mantenimiento | Inventario, nombres vigentes y reporte | Front/n8n/DB | Alta | DONE |
-| REQ-___ | Por definir | Nuevo requisito del próximo backlog | Front / n8n / DB | Por definir | TODO |
+| REQ-001 | Implementación | Reemplazo propio de n8n en Node/Express (Ruta A, 5 flujos: F01 a F05) | Back/DB | Alta | DONE |
+| REQ-002 | Auditoría | Tabla y servicio de auditoría de ejecuciones `pqrs_logs_ejecuciones` | DB/Back | Alta | DONE |
+| REQ-003 | Reglas Negocio | Motor de SLAs dinámicos (2h, 4h, 24h, 48h) y escalamiento por criticidad | Back/DB | Alta | DONE |
+| REQ-004 | Concurrencia | Idempotencia estricta por `request_id` y control de versiones `operation_id` | Back/DB | Alta | DONE |
+| REQ-005 | Visión IA | Módulo de visión multimodal con Gemini y Plan B heurístico local | Back/IA | Alta | DONE |
+| REQ-006 | UX/Front | Calibración de umbral (`confianza < 0.85`) e interfaz Human-in-the-Loop (`/vision`) | Front/Back | Alta | DONE |
+| REQ-007 | Benchmark | Dataset de 20 casos reales y reporte estadístico de precisión por campo | Tests/Doc | Alta | DONE |
+| REQ-008 | Transversal | Cumplimiento Ley 1581 (PII), RBAC, variables de entorno y 98 pruebas Jest | Transversal | Alta | DONE |
 
 Plantilla para copiar sin asumir nuevas tareas:
 

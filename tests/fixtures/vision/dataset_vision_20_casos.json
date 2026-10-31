@@ -1,0 +1,322 @@
+[
+  {
+    "id": 1,
+    "archivo": "01_formulario_facturacion_luz_natural.jpg",
+    "condicion_captura": "Luz natural diurna, plano cenital, alta resolución (1080p)",
+    "tipo_documento": "Formulario impreso diligenciado",
+    "ground_truth": {
+      "nombre_solicitante": "Alejandro Gómez Valencia",
+      "email_solicitante": "alejandro.gomez@empresa.com",
+      "telefono_solicitante": "3104567890",
+      "tipo_solicitud": "Reclamo",
+      "prioridad_sugerida": "Alta",
+      "area_sugerida": "Facturación y Cobranzas",
+      "asunto": "Cobro duplicado en factura de servicio",
+      "descripcion": "Se generó cobro doble por el canon mensual de la plataforma en la tarjeta de crédito empresarial durante el ciclo de octubre."
+    }
+  },
+  {
+    "id": 2,
+    "archivo": "02_formulario_soporte_inclinacion_leve.jpg",
+    "condicion_captura": "Inclinación de 15 grados, sombra parcial en esquina inferior",
+    "tipo_documento": "Formulario físico impreso",
+    "ground_truth": {
+      "nombre_solicitante": "Beatriz Helena Morales",
+      "email_solicitante": "beatriz.morales@logistica.com.co",
+      "telefono_solicitante": "3158901234",
+      "tipo_solicitud": "Soporte Técnico",
+      "prioridad_sugerida": "Crítica",
+      "area_sugerida": "Soporte Técnico y Sistemas",
+      "asunto": "Caída del servicio de integración API",
+      "descripcion": "El conector de webhooks está arrojando error 503 continuo impidiendo el despacho de pedidos desde el centro de distribución."
+    }
+  },
+  {
+    "id": 3,
+    "archivo": "03_formulario_peticion_luz_baja.jpg",
+    "condicion_captura": "Luz baja artificial de oficina, grano visual leve",
+    "tipo_documento": "Formato institucional físico",
+    "ground_truth": {
+      "nombre_solicitante": "Carlos Julio Restrepo",
+      "email_solicitante": "carlos.restrepo@bancoldex.gov.co",
+      "telefono_solicitante": "3007654321",
+      "tipo_solicitud": "Petición",
+      "prioridad_sugerida": "Media",
+      "area_sugerida": "Soporte Técnico y Sistemas",
+      "asunto": "Solicitud copia auténtica de contrato B2B",
+      "descripcion": "Solicito copia del anexo técnico del contrato de prestación de servicios de software suscrito para la vigencia 2026."
+    }
+  },
+  {
+    "id": 4,
+    "archivo": "04_evidencia_novedad_terminal_averiado.jpg",
+    "condicion_captura": "Foto angular de dispositivo con pantalla fracturada, reflejo de flash",
+    "tipo_documento": "Fotografía celular de novedad / avería física",
+    "ground_truth": {
+      "nombre_solicitante": "Diana Marcela Ospina",
+      "email_solicitante": "diana.ospina@retail-express.com",
+      "telefono_solicitante": "3201239876",
+      "tipo_solicitud": "Reclamo",
+      "prioridad_sugerida": "Alta",
+      "area_sugerida": "Control de Calidad y Garantías",
+      "asunto": "Terminal POS entregado con pantalla rota",
+      "descripcion": "El equipo lector de tarjetas recibido mediante guía 984572 llegó con la pantalla LCD rota y sin responder al encendido."
+    }
+  },
+  {
+    "id": 5,
+    "archivo": "05_formulario_queja_atencion.jpg",
+    "condicion_captura": "Plano frontal, iluminación homogénea",
+    "tipo_documento": "Formulario PQR de ventanilla física",
+    "ground_truth": {
+      "nombre_solicitante": "Eduardo Silva Cadavid",
+      "email_solicitante": "eduardo.silva@distribuciones.com",
+      "telefono_solicitante": "3119876543",
+      "tipo_solicitud": "Queja",
+      "prioridad_sugerida": "Media",
+      "area_sugerida": "Control de Calidad y Garantías",
+      "asunto": "Inconformidad con la atención del asesor técnico",
+      "descripcion": "El asesor asignado no brindó solución oportuna al ticket anterior y cerró el caso sin verificar la estabilidad del cliente."
+    }
+  },
+  {
+    "id": 6,
+    "archivo": "06_factura_sobrecosto_no_autorizado.jpg",
+    "condicion_captura": "Foto de factura física con sello de recibido",
+    "tipo_documento": "Documento comercial impreso",
+    "ground_truth": {
+      "nombre_solicitante": "Fabiola Andrea Méndez",
+      "email_solicitante": "fabiola.mendez@consultores.co",
+      "telefono_solicitante": "3184561230",
+      "tipo_solicitud": "Reclamo",
+      "prioridad_sugerida": "Alta",
+      "area_sugerida": "Facturación y Cobranzas",
+      "asunto": "Sobrecosto no pactado en factura mensual",
+      "descripcion": "Aparece un cobro por $450.000 COP bajo el concepto de soporte prémium que no fue contratado ni autorizado en el acuerdo comercial."
+    }
+  },
+  {
+    "id": 7,
+    "archivo": "07_formulario_sugerencia_mejora.jpg",
+    "condicion_captura": "Foto nítida de celular, fondo de madera",
+    "tipo_documento": "Formato de sugerencias y PQRS",
+    "ground_truth": {
+      "nombre_solicitante": "Gabriel Jaime Ochoa",
+      "email_solicitante": "gabriel.ochoa@transportes.com",
+      "telefono_solicitante": "3015432109",
+      "tipo_solicitud": "Sugerencia",
+      "prioridad_sugerida": "Baja",
+      "area_sugerida": "Soporte Técnico y Sistemas",
+      "asunto": "Incorporación de autenticación de dos factores en portal",
+      "descripcion": "Sugerimos habilitar autenticación multifactor (2FA) mediante aplicación autenticadora para reforzar la seguridad de los agentes."
+    }
+  },
+  {
+    "id": 8,
+    "archivo": "08_evidencia_caja_despacho_danada.jpg",
+    "condicion_captura": "Foto con luz fluorescente de bodega, etiqueta de transporte visible",
+    "tipo_documento": "Evidencia de entrega averiada",
+    "ground_truth": {
+      "nombre_solicitante": "Hernando Casas Peñuela",
+      "email_solicitante": "hernando.casas@suministros.com.co",
+      "telefono_solicitante": "3146789012",
+      "tipo_solicitud": "Reclamo",
+      "prioridad_sugerida": "Alta",
+      "area_sugerida": "Control de Calidad y Garantías",
+      "asunto": "Embalaje destruido y producto faltante en entrega",
+      "descripcion": "La caja de servidores compactos fue entregada perforada con pérdida de 2 adaptadores de corriente y discos de respaldo."
+    }
+  },
+  {
+    "id": 9,
+    "archivo": "09_formulario_pago_no_aplicado.jpg",
+    "condicion_captura": "Foto con sombra de mano del usuario, texto mecanografiado",
+    "tipo_documento": "Formulario físico de tesorería",
+    "ground_truth": {
+      "nombre_solicitante": "Isabel Cristina Vargas",
+      "email_solicitante": "isabel.vargas@almacenes.co",
+      "telefono_solicitante": "3178901245",
+      "tipo_solicitud": "Reclamo",
+      "prioridad_sugerida": "Alta",
+      "area_sugerida": "Facturación y Cobranzas",
+      "asunto": "Pago por PSE debitado y no aplicado en sistema",
+      "descripcion": "Se realizó transferencia por $1.200.000 COP con comprobante CUS 8912301, el dinero fue descontado pero el servicio aparece suspendido."
+    }
+  },
+  {
+    "id": 10,
+    "archivo": "10_formulario_certificado_retencion.jpg",
+    "condicion_captura": "PDF escaneado a 200 DPI en escala de grises",
+    "tipo_documento": "Petición tributaria",
+    "ground_truth": {
+      "nombre_solicitante": "Javier Enrique Solano",
+      "email_solicitante": "javier.solano@constructora.com",
+      "telefono_solicitante": "3103456781",
+      "tipo_solicitud": "Petición",
+      "prioridad_sugerida": "Media",
+      "area_sugerida": "Facturación y Cobranzas",
+      "asunto": "Expedición certificado de retención en la fuente",
+      "descripcion": "Requerimos con urgencia el certificado de retención de ICA e IVA correspondiente al tercer bimestre de 2026 para auditoría."
+    }
+  },
+  {
+    "id": 11,
+    "archivo": "11_formulario_biometrico_falla.jpg",
+    "condicion_captura": "Foto en ángulo tomada en recepción, iluminación cálida",
+    "tipo_documento": "Reporte de incidencia de planta",
+    "ground_truth": {
+      "nombre_solicitante": "Karen Lizeth Barrera",
+      "email_solicitante": "karen.barrera@textiles.com.co",
+      "telefono_solicitante": "3127894561",
+      "tipo_solicitud": "Soporte Técnico",
+      "prioridad_sugerida": "Crítica",
+      "area_sugerida": "Soporte Técnico y Sistemas",
+      "asunto": "Fallo en lector biométrico de acceso de personal",
+      "descripcion": "El dispositivo de control de torniquetes no reconoce la huella de los operarios de turno generando congestión en portería."
+    }
+  },
+  {
+    "id": 12,
+    "archivo": "12_formulario_actualizacion_rut.jpg",
+    "condicion_captura": "Foto frontal de celular con flash automático",
+    "tipo_documento": "Formato de actualización corporativa",
+    "ground_truth": {
+      "nombre_solicitante": "Luis Fernando Caicedo",
+      "email_solicitante": "luis.caicedo@inversiones.com",
+      "telefono_solicitante": "3165432198",
+      "tipo_solicitud": "Petición",
+      "prioridad_sugerida": "Media",
+      "area_sugerida": "Facturación y Cobranzas",
+      "asunto": "Actualización de dirección fiscal y RUT en facturación",
+      "descripcion": "Informamos cambio de domicilio comercial a la Carrera 27 # 45-12 y adjuntamos nuevo formulario para expedir facturas electrónicas."
+    }
+  },
+  {
+    "id": 13,
+    "archivo": "13_evidencia_datacenter_alerta.jpg",
+    "condicion_captura": "Foto de pantalla de panel de servidores con advertencia de temperatura",
+    "tipo_documento": "Evidencia técnica de novedad física",
+    "ground_truth": {
+      "nombre_solicitante": "Mauricio Andrés Rueda",
+      "email_solicitante": "mauricio.rueda@infraestructura.net",
+      "telefono_solicitante": "3156781234",
+      "tipo_solicitud": "Soporte Técnico",
+      "prioridad_sugerida": "Crítica",
+      "area_sugerida": "Soporte Técnico y Sistemas",
+      "asunto": "Alarma crítica de temperatura en rack de comunicaciones",
+      "descripcion": "El sensor ambiental reporta 38°C en el rack principal; se requiere revisión inmediata del sistema de aire de precisión."
+    }
+  },
+  {
+    "id": 14,
+    "archivo": "14_formulario_demora_entrega.jpg",
+    "condicion_captura": "Foto de documento firmado sobre mostrador con ligera perspectiva",
+    "tipo_documento": "Formato de inconformidad logística",
+    "ground_truth": {
+      "nombre_solicitante": "Natalia Sofía Cárdenas",
+      "email_solicitante": "natalia.cardenas@comercializadora.co",
+      "telefono_solicitante": "3214567892",
+      "tipo_solicitud": "Queja",
+      "prioridad_sugerida": "Media",
+      "area_sugerida": "Control de Calidad y Garantías",
+      "asunto": "Demora de 12 días en despacho de repuestos contratados",
+      "descripcion": "La orden de compra #5411 debió entregarse el 15 de octubre y a la fecha no se ha emitido número de guía ni respuesta del transportador."
+    }
+  },
+  {
+    "id": 15,
+    "archivo": "15_formulario_cambio_plan.jpg",
+    "condicion_captura": "Foto cenital con luz difusa",
+    "tipo_documento": "Solicitud comercial de suscripción",
+    "ground_truth": {
+      "nombre_solicitante": "Oscar Iván Delgado",
+      "email_solicitante": "oscar.delgado@soluciones.com",
+      "telefono_solicitante": "3132109874",
+      "tipo_solicitud": "Petición",
+      "prioridad_sugerida": "Media",
+      "area_sugerida": "Facturación y Cobranzas",
+      "asunto": "Migración de plan básico a corporativo Enterprise",
+      "descripcion": "Deseamos ampliar el número de licencias activas de 20 a 50 usuarios conservando el repositorio documental unificado."
+    }
+  },
+  {
+    "id": 16,
+    "archivo": "16_evidencia_etiqueta_borrosa.jpg",
+    "condicion_captura": "Etiqueta térmica parcialmente desgastada, iluminación baja",
+    "tipo_documento": "Registro de remisión física",
+    "ground_truth": {
+      "nombre_solicitante": "Patricia Elena Quintero",
+      "email_solicitante": "patricia.quintero@envios.com.co",
+      "telefono_solicitante": "3189012345",
+      "tipo_solicitud": "Reclamo",
+      "prioridad_sugerida": "Alta",
+      "area_sugerida": "Control de Calidad y Garantías",
+      "asunto": "Código de barras ilegible en remisión de entrega",
+      "descripcion": "El paquete arribó con la etiqueta raspada impidiendo el escaneo en recepción; se solicita confirmación de contenido y remitente."
+    }
+  },
+  {
+    "id": 17,
+    "archivo": "17_formulario_garantia_devolucion.jpg",
+    "condicion_captura": "Formulario sellado en tinta azul con firma manual",
+    "tipo_documento": "Acta de garantía de producto",
+    "ground_truth": {
+      "nombre_solicitante": "Ricardo Alonso Forero",
+      "email_solicitante": "ricardo.forero@ferreterias.co",
+      "telefono_solicitante": "3108905672",
+      "tipo_solicitud": "Reclamo",
+      "prioridad_sugerida": "Alta",
+      "area_sugerida": "Control de Calidad y Garantías",
+      "asunto": "Solicitud de garantía por lote de sensores defectuosos",
+      "descripcion": "De las 10 unidades de sensores IoT adquiridas en la orden 342, 4 presentan fallas de calibración y reinicios continuos."
+    }
+  },
+  {
+    "id": 18,
+    "archivo": "18_formulario_apertura_sucursal.jpg",
+    "condicion_captura": "Escaneo PDF blanco y negro de alta calidad (300 DPI)",
+    "tipo_documento": "Solicitud formal membretada",
+    "ground_truth": {
+      "nombre_solicitante": "Sandra Milena Henao",
+      "email_solicitante": "sandra.henao@farmacias.com",
+      "telefono_solicitante": "3143210985",
+      "tipo_solicitud": "Petición",
+      "prioridad_sugerida": "Media",
+      "area_sugerida": "Soporte Técnico y Sistemas",
+      "asunto": "Habilitación de punto de red para nueva sede",
+      "descripcion": "Requerimos la configuración de VPN y túnel seguro para enlazar la nueva sucursal de Bucaramanga con el servidor central."
+    }
+  },
+  {
+    "id": 19,
+    "archivo": "19_formulario_integracion_webhooks.jpg",
+    "condicion_captura": "Foto tomada sobre escritorio de oficina con cuaderno de notas de fondo",
+    "tipo_documento": "Formato de requerimiento de desarrollo",
+    "ground_truth": {
+      "nombre_solicitante": "Tomás Eduardo Pantoja",
+      "email_solicitante": "tomas.pantoja@fintech-b2b.com",
+      "telefono_solicitante": "3167890123",
+      "tipo_solicitud": "Soporte Técnico",
+      "prioridad_sugerida": "Alta",
+      "area_sugerida": "Soporte Técnico y Sistemas",
+      "asunto": "Soporte para recepción de eventos webhook n8n/Express",
+      "descripcion": "Requerimos asesoría técnica para verificar la firma criptográfica HMAC en los eventos de actualización de tickets PQRS."
+    }
+  },
+  {
+    "id": 20,
+    "archivo": "20_formulario_nuevo_medio_pago.jpg",
+    "condicion_captura": "Foto con luz cálida de lámpara de escritorio",
+    "tipo_documento": "Formato de buzón de sugerencias",
+    "ground_truth": {
+      "nombre_solicitante": "Valentina Correa Restrepo",
+      "email_solicitante": "valentina.correa@boutique.co",
+      "telefono_solicitante": "3112345678",
+      "tipo_solicitud": "Sugerencia",
+      "prioridad_sugerida": "Baja",
+      "area_sugerida": "Facturación y Cobranzas",
+      "asunto": "Habilitar pago corporativo con transferencias ACH en línea",
+      "descripcion": "Sugerimos incluir la opción de débito automático ACH empresarial para agilizar la renovación mensual de la suscripción sin usar tarjeta de crédito."
+    }
+  }
+]

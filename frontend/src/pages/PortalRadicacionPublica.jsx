@@ -127,10 +127,17 @@ export default function PortalRadicacionPublica() {
         documento_id: documentoId,
       };
 
-      const webhookUrl = 'http://localhost:5678/webhook/radicar-pqrs';
-      const res = await axios.post(webhookUrl, webhookPayload, {
-        headers: { 'Content-Type': 'application/json' },
-      });
+      // Invocar motor nativo de radicación en Express (Ruta A) con fallback de contingencia
+      let res;
+      try {
+        res = await axios.post('/api/pqrs/radicar', webhookPayload);
+      } catch (errNative) {
+        try {
+          res = await axios.post('/webhook/radicar-pqrs', webhookPayload);
+        } catch {
+          res = await axios.post('http://localhost:5678/webhook/radicar-pqrs', webhookPayload);
+        }
+      }
 
       const dataRespuesta = res.data?.respuesta || res.data || {};
       const ticketId = dataRespuesta.ticket_id || res.data?.ticket?.ticket_id || res.data?.ticket_id;
