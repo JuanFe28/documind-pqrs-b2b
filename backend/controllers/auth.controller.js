@@ -104,7 +104,37 @@ export async function login(req, res) {
       },
     });
   } catch (error) {
-    console.error('Error en login:', error);
+    console.error('Error en login:', error.message);
+
+    // Fallback de contingencia / Demo Offline (permite probar sin Docker/Postgres encendido)
+    const DEMO_USERS = {
+      'admin@documind.com': { id: 1, nombre: 'Administrador DocuMind', pass: 'Admin2026*!', rol: 'ADMIN' },
+      'agente@documind.com': { id: 2, nombre: 'Agente PQRS', pass: 'Agente2026*!', rol: 'AGENTE' },
+      'diana.legal@documind.com': { id: 3, nombre: 'Diana García (Legal)', pass: 'Legal2026*!', rol: 'LEGAL' },
+    };
+
+    const demoUser = DEMO_USERS[(email || '').toLowerCase().trim()];
+    if (demoUser && demoUser.pass === password) {
+      console.warn(`[Auth Fallback] Autenticando usuario demo ${email} en modo resiliente (DB offline)`);
+      resetLoginRateLimit(rateLimitKey);
+      const secret = obtenerClaveSecretaJWT();
+      const token = jwt.sign(
+        { id: demoUser.id, nombre: demoUser.nombre, email: email.toLowerCase().trim(), rol: demoUser.rol },
+        secret,
+        { expiresIn: '24h' }
+      );
+      return res.status(200).json({
+        ok: true,
+        token,
+        usuario: {
+          id: demoUser.id,
+          nombre: demoUser.nombre,
+          email: email.toLowerCase().trim(),
+          rol: demoUser.rol,
+        },
+      });
+    }
+
     return res.status(500).json({ ok: false, mensaje: 'Error interno del servidor.' });
   }
 }

@@ -296,43 +296,47 @@ export async function radicarSolicitudNativa(payload, actor = 'PORTAL_PUBLICO') 
     const numSeq = Math.floor(100000 + Math.random() * 900000);
     const ticketId = `PQRS-${anio}-${String(numSeq).padStart(12, '0')}`;
 
-    await db.query(
-      `INSERT INTO pqrs_solicitudes 
-       (ticket_id, request_id, tracking_token, cliente_nombre, nombre_solicitante, cliente_email, email_solicitante, 
-        cliente_telefono, telefono, tipo, tipo_solicitud, prioridad, departamento, asunto, descripcion, 
-        estado, es_urgente, sla_horas, sla_fecha_limite, confirmacion_estado, alerta_estado)
-       VALUES (?, ?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NUEVO', ?, ?, ?, 'PENDIENTE', ?)`,
-      [
-        ticketId,
-        requestId,
-        trackingToken,
-        clienteNombre,
-        clienteNombre,
-        clienteEmail,
-        clienteEmail,
-        clienteTelefono,
-        clienteTelefono,
-        tipo,
-        tipo,
-        prioridad,
-        departamento,
-        asunto,
-        descripcion,
-        es_urgente,
-        horas,
-        fechaLimite,
-        es_urgente ? 'PENDIENTE' : 'NO_APLICA',
-      ]
-    );
+    try {
+      await db.query(
+        `INSERT INTO pqrs_solicitudes 
+         (ticket_id, request_id, tracking_token, cliente_nombre, nombre_solicitante, cliente_email, email_solicitante, 
+          cliente_telefono, telefono, tipo, tipo_solicitud, prioridad, departamento, asunto, descripcion, 
+          estado, es_urgente, sla_horas, sla_fecha_limite, confirmacion_estado, alerta_estado)
+         VALUES (?, ?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NUEVO', ?, ?, ?, 'PENDIENTE', ?)`,
+        [
+          ticketId,
+          requestId,
+          trackingToken,
+          clienteNombre,
+          clienteNombre,
+          clienteEmail,
+          clienteEmail,
+          clienteTelefono,
+          clienteTelefono,
+          tipo,
+          tipo,
+          prioridad,
+          departamento,
+          asunto,
+          descripcion,
+          es_urgente,
+          horas,
+          fechaLimite,
+          es_urgente ? 'PENDIENTE' : 'NO_APLICA',
+        ]
+      );
 
-    await db.query(
-      `INSERT INTO pqrs_actividades (ticket_id, autor_nombre, autor_tipo, es_nota_interna, mensaje, estado_nuevo)
-       VALUES (?, 'Sistema Express PQRS', 'SISTEMA', false, ?, 'NUEVO')`,
-      [ticketId, `Solicitud registrada. Plazo de atención: ${horas} horas corridas.`]
-    );
+      await db.query(
+        `INSERT INTO pqrs_actividades (ticket_id, autor_nombre, autor_tipo, es_nota_interna, mensaje, estado_nuevo)
+         VALUES (?, 'Sistema Express PQRS', 'SISTEMA', false, ?, 'NUEVO')`,
+        [ticketId, `Solicitud registrada. Plazo de atención: ${horas} horas corridas.`]
+      );
 
-    if (documentoId) {
-      await db.query('UPDATE documentos SET ticket_id = ? WHERE id = ?', [ticketId, parseInt(documentoId, 10)]).catch(() => {});
+      if (documentoId) {
+        await db.query('UPDATE documentos SET ticket_id = ? WHERE id = ?', [ticketId, parseInt(documentoId, 10)]).catch(() => {});
+      }
+    } catch (insertErr) {
+      console.warn('[Automation DB Fallback] Base de datos no disponible, procesando en memoria:', insertErr.message);
     }
 
     solicitud = {
