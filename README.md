@@ -172,6 +172,7 @@ Toda la documentación ejecutiva y técnica de sustentación se encuentra organi
 | Documento | Descripción |
 | --- | --- |
 | [`DOCUMENTO_TECNICO_TERCER_CORTE.md`](file:///docs/DOCUMENTO_TECNICO_TERCER_CORTE.md) | **Documento Técnico Oficial del Tercer Corte:** Arquitectura, Ruta A, módulo de visión multimodal, benchmark y respuestas de sustentación (Máx. 10 págs). |
+| [`GUION_VIDEO_DEMO_TERCER_CORTE.md`](file:///docs/GUION_VIDEO_DEMO_TERCER_CORTE.md) | **Guión Oficial del Video de Demostración (8 Minutos):** Recorrido paso a paso escena por escena para grabación con OBS/Loom. |
 | [`REPORTE_EVALUACION_VISION_20.md`](file:///docs/REPORTE_EVALUACION_VISION_20.md) | Reporte estadístico del benchmark de 20 casos reales fotografiados con celular. |
 | [`Guia_Tercer_Corte_Desarrollo_de_Aplicaciones_Empresariales.pdf`](file:///docs/Guia_Tercer_Corte_Desarrollo_de_Aplicaciones_Empresariales.pdf) | Guía oficial del docente Wilson Castaño Galviz (26/10/2026). |
 | [`SEMANA_1_DISENO.pdf`](file:///docs/SEMANA_1_DISENO.pdf) | Documento de diseño arquitectónico y de inventario de flujos de Semana 1. |
