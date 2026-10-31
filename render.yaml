@@ -1,0 +1,80 @@
+# ==============================================================================
+# Configuración Infrastructure-as-Code para Despliegue en Render (Nivel Gratuito)
+# Proyecto: DocuMind & PQRS B2B - Tercer Corte
+# ==============================================================================
+services:
+  # ─── 1. Backend API REST (Node.js / Express) ────────────────────────────────
+  - type: web
+    name: documind-backend
+    env: node
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: TRUST_PROXY
+        value: "true"
+      - key: DB_HOST
+        fromDatabase:
+          name: documind-postgres
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: documind-postgres
+          property: port
+      - key: DB_USER
+        fromDatabase:
+          name: documind-postgres
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: documind-postgres
+          property: password
+      - key: DB_NAME
+        fromDatabase:
+          name: documind-postgres
+          property: database
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false # Configurar en el dashboard de Render
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+
+  # ─── 2. Frontend SPA (React + Vite) ─────────────────────────────────────────
+  - type: web
+    name: documind-frontend
+    env: static
+    plan: free
+    region: oregon
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    routes:
+      # Regla SPA: Redirigir todas las rutas al index.html
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://documind-backend.onrender.com/api
+
+# ─── 3. Base de Datos PostgreSQL Gestionada Gratuita ─────────────────────────
+databases:
+  - name: documind-postgres
+    plan: free
+    region: oregon
+    databaseName: pqrs_db
+    user: pqrs_user
