@@ -28,7 +28,6 @@ function AppLayout() {
         <Routes>
           <Route path="/pqrs" element={<GestionPqrs />} />
           <Route path="/radicar" element={<PortalRadicacionPublica />} />
-      <Route path="/vision" element={<DigitalizacionVision />} />
           <Route path="/vision" element={<DigitalizacionVision />} />
           <Route path="/ingesta" element={<IngestaDocumental selectedRepo={selectedRepo} onRepoSelect={setSelectedRepo} />} />
           <Route path="/chat" element={<ChatRAG selectedRepo={selectedRepo} />} />

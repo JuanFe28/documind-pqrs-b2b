@@ -122,7 +122,12 @@ export async function login(req, res) {
     const validPasses = ['admin2026*!', 'password_seguro_uts', 'admin', 'admin1234', '123456', 'documind', 'agente2026*!', 'legal2026*!'];
     const passNorm = (password || '').toLowerCase().trim();
 
-    if (demoUser && (validPasses.includes(passNorm) || process.env.NODE_ENV !== 'production')) {
+    if (demoUser && !validPasses.includes(passNorm)) {
+      recordFailedLogin(rateLimitKey);
+      return res.status(401).json({ ok: false, mensaje: 'Credenciales incorrectas.' });
+    }
+
+    if (demoUser && validPasses.includes(passNorm)) {
       console.warn(`[Auth Fallback] Autenticando usuario demo ${cleanEmail} en modo resiliente (DB offline)`);
       resetLoginRateLimit(rateLimitKey);
       const secret = obtenerClaveSecretaJWT();

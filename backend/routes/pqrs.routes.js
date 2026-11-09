@@ -13,6 +13,10 @@ import {
   trackingPqrsController,
   actualizarPqrsController,
   calificarPqrsController,
+  alertasSlaController,
+  reporteSemanalController,
+  cerrarCsatController,
+  escalarN2Controller,
   obtenerLogsController,
 } from '../controllers/automation.controller.js';
 import { verificarToken, verificarTokenOpcional, requireRol } from '../middleware/auth.middleware.js';
@@ -26,8 +30,12 @@ const ROLES_INTERNOS_PQRS = ['ADMIN', 'AGENTE', 'SUPERVISOR', 'LEGAL', 'FINANCIE
 router.post('/radicar', radicarPqrsController);
 router.get('/consultar', verificarTokenOpcional, consultarPqrsController);
 router.get('/logs', verificarToken, requireRol('ADMIN', 'SUPERVISOR'), obtenerLogsController);
+router.get('/alertas-sla', verificarToken, requireRol(...ROLES_INTERNOS_PQRS), alertasSlaController);
+router.post('/reporte-semanal', verificarToken, requireRol(...ROLES_INTERNOS_PQRS), reporteSemanalController);
 router.put('/:ticketId/actualizar', verificarTokenOpcional, actualizarPqrsController);
 router.post('/:ticketId/calificar', calificarPqrsController);
+router.post('/:ticketId/cerrar-csat', verificarToken, requireRol(...ROLES_INTERNOS_PQRS), cerrarCsatController);
+router.post('/:ticketId/escalar-n2', verificarToken, requireRol(...ROLES_INTERNOS_PQRS), escalarN2Controller);
 
 // Endpoints administrativos protegidos (requieren autenticación de funcionario)
 router.get('/', verificarToken, requireRol(...ROLES_INTERNOS_PQRS), listarPqrs);

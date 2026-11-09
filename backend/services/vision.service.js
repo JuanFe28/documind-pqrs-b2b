@@ -29,67 +29,186 @@ function conTimeout(promesa, ms = 15000) {
   return Promise.race([promesa, timeout]).finally(() => clearTimeout(timer));
 }
 
+const ETIQUETAS_CORTE = /\s+(?:correo|e-?mail|tel[eé]fono|celular|documento|identificaci[oó]n)\s*:/i;
+
+function limpiarValorEtiqueta(valor) {
+  if (!valor) return null;
+  const limpio = String(valor).replace(/\u0000/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!limpio) return null;
+  return limpio.replace(ETIQUETAS_CORTE, '').trim() || null;
+}
+
+function buscarValorPorEtiqueta(lineas, patrones) {
+  for (const lineaOriginal of lineas) {
+    const linea = lineaOriginal.replace(/\u0000/g, ' ').trim();
+    if (!linea) continue;
+    for (const patron of patrones) {
+      const coincidencia = linea.match(patron);
+      if (coincidencia) {
+        const valor = limpiarValorEtiqueta(coincidencia[1]);
+        if (valor) return valor;
+      }
+    }
+  }
+  return null;
+}
+
+function normalizarTipoSolicitud(valor) {
+  if (!valor) return null;
+  const texto = valor.toLowerCase();
+  if (/soporte|t[eé]cnico/.test(texto)) return 'Soporte Técnico';
+  if (/reclamo/.test(texto)) return 'Reclamo';
+  if (/queja/.test(texto)) return 'Queja';
+  if (/sugerencia/.test(texto)) return 'Sugerencia';
+  if (/petici[oó]n/.test(texto)) return 'Petición';
+  return null;
+}
+
+function normalizarPrioridad(valor) {
+  if (!valor) return null;
+  const texto = valor.toLowerCase();
+  if (/cr[íi]t/.test(texto)) return 'Crítica';
+  if (/alta/.test(texto)) return 'Alta';
+  if (/media/.test(texto)) return 'Media';
+  if (/baja/.test(texto)) return 'Baja';
+  return null;
+}
+
+/**
+ * Obtiene el bloque de texto estructurado de un formulario.
+ * Soporta buffers de texto plano y JPEG reales con comentario COM / bloque legible al final.
+ */
+function extraerBloqueTexto(buffer, mimeType, nombreArchivo = '') {
+  let rawStr = '';
+  try {
+    rawStr = buffer.toString('utf8');
+  } catch {
+    return '';
+  }
+
+  const esTextoPlano = (typeof mimeType === 'string' && mimeType.startsWith('text/')) ||
+    /\.(txt|md|csv|log)$/i.test(nombreArchivo || '');
+  if (esTextoPlano) return rawStr;
+
+  const marcadoresInicio = [
+    'FORMULARIO DE ATENCIÓN DE PQRS B2B',
+    'FORMULARIO DE ATENCION DE PQRS B2B',
+    'FORMULARIO FÍSICO DE ATENCIÓN PQRS',
+    'DATOS DEL SOLICITANTE',
+    '[BLOQUE_TEXTO_VISION]',
+  ];
+
+  let inicio = -1;
+  for (const marcador of marcadoresInicio) {
+    const indice = rawStr.indexOf(marcador);
+    if (indice !== -1 && (inicio === -1 || indice < inicio)) inicio = indice;
+  }
+
+  if (inicio !== -1) {
+    return rawStr.slice(Math.max(0, inicio - 200), inicio + 2500);
+  }
+
+  const bloquesImprimibles = rawStr.match(/[\x20-\x7E\u00A0-\u00FF\r\n\t]{4,}/g) || [];
+  return bloquesImprimibles.join('\n');
+}
+
+function extraerDescripcion(lineas) {
+  const partes = [];
+  let capturando = false;
+
+  for (const lineaOriginal of lineas) {
+    const linea = lineaOriginal.replace(/\u0000/g, ' ').trim();
+
+    if (!capturando) {
+      if (/^descripci[oOóÓ]n\b/i.test(linea)) {
+        capturando = true;
+        const resto = linea.replace(/^descripci[oOóÓ]n[^:]*[:\-]?\s*/i, '').trim();
+        if (resto) partes.push(resto);
+      }
+      continue;
+    }
+
+    if (/^=+$/.test(linea) || /^firma\s+y\s+sello/i.test(linea) || /^\[?fin[_ ]bloque/i.test(linea)) {
+      break;
+    }
+    if (/[\x00-\x08\x0E-\x1F]/.test(linea)) break;
+    if (linea) partes.push(linea);
+  }
+
+  return partes.join(' ').replace(/\s+/g, ' ').trim();
+}
+
 /**
  * Plan B: Extractor de contingencia cuando la cuota de IA se agota o no hay conexión
  */
 function ejecutarPlanBHeuristico(buffer, mimeType, nombreArchivo = '') {
-  let textoExtraido = '';
-  try {
-    // Intentar decodificar como texto plano o buscar cadenas imprimibles en el buffer
-    const rawStr = buffer.toString('utf8');
-    const printableMatches = rawStr.match(/[A-Za-z0-9áéíóúÁÉÍÓÚñÑ@.,:;\-_/\s]{4,}/g) || [];
-    textoExtraido = printableMatches.join(' ').slice(0, 3000);
-  } catch {
-    textoExtraido = '';
+  const textoExtraido = extraerBloqueTexto(buffer, mimeType, nombreArchivo);
+  const lineas = textoExtraido.split(/\r?\n/);
+
+  const emailMatch = textoExtraido.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+
+  const lineaTelefono = buscarValorPorEtiqueta(lineas, [
+    /^(?:tel[eé]fono|celular|m[oó]vil)\b[^:]*[:\-]\s*(.+)$/i,
+  ]);
+  const telMatch = (lineaTelefono || textoExtraido).match(
+    /(?:\+?\s?57[\s.-]?)?\b(?:3\d{2}[\s.-]?\d{3}[\s.-]?\d{4}|[1-9]\d{6,9})\b/
+  );
+
+  const nombreLinea = buscarValorPorEtiqueta(lineas, [
+    /^nombre(?:\s+completo)?\b[^:]*[:\-]\s*(.+)$/i,
+    /^solicitante\b[^:]*[:\-]\s*(.+)$/i,
+    /^cliente\b[^:]*[:\-]\s*(.+)$/i,
+  ]);
+  const nombreMatch = nombreLinea
+    ? nombreLinea.match(/^([A-Za-zÁÉÍÓÚÜÑáéíóúüñ][A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s.'-]{2,80})/)
+    : null;
+
+  const tipoLinea = buscarValorPorEtiqueta(lineas, [
+    /^tipo\s+de\s+(?:solicitud|requerimiento)\b[^:]*[:\-]\s*(.+)$/i,
+  ]) || buscarValorPorEtiqueta(lineas, [
+    /^tipo\b[^:]*[:\-]\s*(.+)$/i,
+  ]);
+  const tipoExplicit = normalizarTipoSolicitud(tipoLinea);
+
+  const prioridadLinea = buscarValorPorEtiqueta(lineas, [
+    /^(?:nivel\s+de\s+)?prioridad\b[^:]*[:\-]\s*(.+)$/i,
+    /^(?:urgencia)\b[^:]*[:\-]\s*(.+)$/i,
+  ]);
+  const prioridadExplicit = normalizarPrioridad(prioridadLinea);
+
+  const areaLinea = buscarValorPorEtiqueta(lineas, [
+    /^[ÁáA]rea\s+de\s+destino\b[^:]*[:\-]\s*(.+)$/i,
+    /^[ÁáA]rea\b[^:]*[:\-]\s*(.+)$/i,
+    /^departamento(?:\s+sugerido)?\b[^:]*[:\-]\s*(.+)$/i,
+  ]);
+
+  const asuntoLinea = buscarValorPorEtiqueta(lineas, [
+    /^(?:asunto|motivo)\b[^:]*[:\-]\s*(.+)$/i,
+  ]);
+
+  const descripcionExtraida = extraerDescripcion(lineas);
+
+  let tipoDetectado = tipoExplicit || 'Petición';
+  if (!tipoExplicit) {
+    if (/reclamo|averia|defecto/i.test(textoExtraido)) tipoDetectado = 'Reclamo';
+    else if (/queja|inconformidad|demora/i.test(textoExtraido)) tipoDetectado = 'Queja';
+    else if (/soporte|falla|error|sistema|caido|alarma|sensor/i.test(textoExtraido)) tipoDetectado = 'Soporte Técnico';
+    else if (/sugerencia|mejora|sugerimos/i.test(textoExtraido)) tipoDetectado = 'Sugerencia';
   }
 
-  // Búsqueda inteligente de patrones clave mediante expresiones regulares
-  const emailMatch = textoExtraido.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-  const telMatch = textoExtraido.match(/(?:(?:\+|00)57\s?)?(?:3\d{2}[-.\s]?\d{3}[-.\s]?\d{4}|[1-9]\d{6})/);
-  
-  const nombreMatch = textoExtraido.match(/(?:nombre(?:\s+completo)?|solicitante|de:)\s*[:\-]?\s*([A-Za-zÁÉÍÓÚñÑ][A-Za-zÁÉÍÓÚñÑ\s]{2,40})/i);
-  const prioMatch = textoExtraido.match(/(?:prioridad|urgencia)\s*[:\-]?\s*(baja|media|alta|cr[íi]tica)/i);
-  const tipoExplicitMatch = textoExtraido.match(/(?:tipo(?:\s+de\s+solicitud)?)\s*[:\-]?\s*(petici[oó]n|queja|reclamo|soporte\s+t[eé]cnico|sugerencia)/i);
-  const asuntoMatch = textoExtraido.match(/(?:asunto|motivo)\s*[:\-]?\s*([^\r\n]{5,100})/i);
-
-  let tipoDetectado = 'Petición';
-  if (tipoExplicitMatch) {
-    const rawTipo = tipoExplicitMatch[1].toLowerCase();
-    if (rawTipo.includes('reclamo')) tipoDetectado = 'Reclamo';
-    else if (rawTipo.includes('queja')) tipoDetectado = 'Queja';
-    else if (rawTipo.includes('soporte')) tipoDetectado = 'Soporte Técnico';
-    else if (rawTipo.includes('sugerencia')) tipoDetectado = 'Sugerencia';
-    else tipoDetectado = 'Petición';
-  } else if (/reclamo|averia|defecto/i.test(textoExtraido)) {
-    tipoDetectado = 'Reclamo';
-  } else if (/queja|inconformidad|demora/i.test(textoExtraido)) {
-    tipoDetectado = 'Queja';
-  } else if (/soporte|falla|error|sistema|caido|alarma|sensor/i.test(textoExtraido)) {
-    tipoDetectado = 'Soporte Técnico';
-  } else if (/sugerencia|mejora|sugerimos/i.test(textoExtraido)) {
-    tipoDetectado = 'Sugerencia';
-  }
-
-  let prioridadDetectada = 'Media';
-  if (prioMatch) {
-    const rawPrio = prioMatch[1].toLowerCase();
-    if (rawPrio.includes('crit')) prioridadDetectada = 'Crítica';
-    else if (rawPrio.includes('alta')) prioridadDetectada = 'Alta';
-    else if (rawPrio.includes('baja')) prioridadDetectada = 'Baja';
-    else prioridadDetectada = 'Media';
-  } else if (/urgente|inmediato|critico|bloqueante/i.test(textoExtraido)) {
-    prioridadDetectada = 'Alta';
-  } else if (tipoDetectado === 'Reclamo') {
-    prioridadDetectada = 'Alta';
-  } else if (tipoDetectado === 'Sugerencia') {
-    prioridadDetectada = 'Baja';
+  let prioridadDetectada = prioridadExplicit || 'Media';
+  if (!prioridadExplicit) {
+    if (/urgente|inmediato|cr[íi]tic|bloqueante/i.test(textoExtraido)) prioridadDetectada = 'Alta';
+    else if (tipoDetectado === 'Reclamo') prioridadDetectada = 'Alta';
+    else if (tipoDetectado === 'Sugerencia') prioridadDetectada = 'Baja';
   }
 
   const nombreExtraido = nombreMatch ? nombreMatch[1].trim() : 'Ciudadano por Verificar';
-  const depto = clasificarDepartamento(nombreArchivo, textoExtraido, tipoDetectado);
+  const depto = areaLinea || clasificarDepartamento(asuntoLinea || nombreArchivo, descripcionExtraida || textoExtraido, tipoDetectado);
 
   const camposCompletos = Boolean(nombreMatch && emailMatch && telMatch);
-  const scoreBase = camposCompletos ? 0.88 : 0.72;
+  const camposEstructurados = Boolean(camposCompletos && tipoExplicit && areaLinea && asuntoLinea);
+  const scoreBase = camposEstructurados ? 0.94 : (camposCompletos ? 0.88 : 0.72);
 
   return {
     modelo_utilizado: 'Plan B (Contingencia Local Heurística)',
@@ -101,13 +220,13 @@ function ejecutarPlanBHeuristico(buffer, mimeType, nombreArchivo = '') {
       'Extracción heurística estructurada ejecutada en servidor local.',
     ],
     confianza_por_campo: {
-      nombre: nombreMatch ? 0.90 : 0.40,
+      nombre: nombreMatch ? 0.95 : 0.40,
       email: emailMatch ? 0.95 : 0.30,
-      telefono: telMatch ? 0.90 : 0.30,
-      tipo_solicitud: tipoExplicitMatch ? 0.92 : 0.75,
-      prioridad_sugerida: prioMatch ? 0.90 : 0.70,
-      asunto: asuntoMatch ? 0.85 : 0.60,
-      descripcion: 0.80,
+      telefono: telMatch ? 0.92 : 0.30,
+      tipo_solicitud: tipoExplicit ? 0.94 : 0.75,
+      prioridad_sugerida: prioridadExplicit ? 0.92 : 0.70,
+      asunto: asuntoLinea ? 0.90 : 0.60,
+      descripcion: descripcionExtraida ? 0.88 : 0.60,
     },
     datos_extraidos: {
       nombre_solicitante: nombreExtraido,
@@ -116,10 +235,10 @@ function ejecutarPlanBHeuristico(buffer, mimeType, nombreArchivo = '') {
       tipo_solicitud: tipoDetectado,
       prioridad_sugerida: prioridadDetectada,
       area_sugerida: depto,
-      asunto: asuntoMatch ? asuntoMatch[1].trim() : `Digitalización física: ${nombreArchivo || 'Formulario PQRS'}`,
-      descripcion: textoExtraido.length > 20
+      asunto: asuntoLinea || `Digitalización física: ${nombreArchivo || 'Formulario PQRS'}`,
+      descripcion: descripcionExtraida || (textoExtraido.length > 20
         ? `[Transcripción Formulario]: ${textoExtraido.slice(0, 500)}`
-        : 'Formulario físico digitalizado pendiente de confirmación manual de contenido por el agente.',
+        : 'Formulario físico digitalizado pendiente de confirmación manual de contenido por el agente.'),
     },
   };
 }

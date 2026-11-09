@@ -64,9 +64,16 @@ function MensajeIA({ respuesta, fuentes, datos_vision, onRadicarTicket, onViewDo
   const [radicando, setRadicando] = useState(false);
   const [resultadoRadicacion, setResultadoRadicacion] = useState(null);
   const [errorRadicacion, setErrorRadicacion] = useState(null);
+  const [revisionConfirmada, setRevisionConfirmada] = useState(false);
+
+  const requiereRevision = !!datos_vision?.requiere_revision_humana;
 
   const handleRadicarClick = async () => {
     if (!datos_vision || radicando || resultadoRadicacion) return;
+    if (requiereRevision && !revisionConfirmada) {
+      setErrorRadicacion('Debe confirmar la verificación de los datos extraídos antes de radicar.');
+      return;
+    }
     setRadicando(true);
     setErrorRadicacion(null);
     try {
@@ -138,18 +145,30 @@ function MensajeIA({ respuesta, fuentes, datos_vision, onRadicarTicket, onViewDo
                 </div>
               </div>
             ) : (
-              <div className="mt-3 flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
-                <p className="text-[11px] text-slate-500">
-                  {esConfiable 
-                    ? '¿Desea crear el requerimiento oficial con estos datos extraídos?' 
-                    : 'Revise los campos dudosos y confirme para registrar el caso.'}
-                </p>
-                <button
-                  type="button"
-                  onClick={handleRadicarClick}
-                  disabled={radicando}
-                  className="btn-primary text-xs px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm whitespace-nowrap disabled:opacity-60"
-                >
+              <div className="mt-3 pt-2 border-t border-slate-100 space-y-3">
+                {requiereRevision && (
+                  <label className="flex items-start gap-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={revisionConfirmada}
+                      onChange={(e) => setRevisionConfirmada(e.target.checked)}
+                      className="mt-0.5 h-3.5 w-3.5 accent-amber-600 flex-shrink-0"
+                    />
+                    <span>Confirmo que he verificado los datos extraídos (confianza &lt; 85%)</span>
+                  </label>
+                )}
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[11px] text-slate-500">
+                    {esConfiable 
+                      ? '¿Desea crear el requerimiento oficial con estos datos extraídos?' 
+                      : 'Revise los campos dudosos y confirme para registrar el caso.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleRadicarClick}
+                    disabled={radicando || (requiereRevision && !revisionConfirmada)}
+                    className="btn-primary text-xs px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm whitespace-nowrap disabled:opacity-60"
+                  >
                   {radicando ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -161,7 +180,8 @@ function MensajeIA({ respuesta, fuentes, datos_vision, onRadicarTicket, onViewDo
                       Radicar en PQRS
                     </>
                   )}
-                </button>
+                  </button>
+                </div>
               </div>
             )}
 
@@ -264,14 +284,20 @@ export default function ChatRAG({ selectedRepo }) {
 
   const handleRadicarTicket = async (datosVision) => {
     const d = datosVision.datos_extraidos || {};
+    const nombreSolicitante = d.nombre_solicitante || 'Ciudadano Anónimo';
+    const emailSolicitante = d.email_solicitante || 'contacto@empresa.com';
+    const areaSugerida = d.area_sugerida || 'Soporte Técnico y Sistemas';
     const payload = {
       request_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'req-' + Date.now(),
-      nombre: d.nombre_solicitante || 'Ciudadano Anónimo',
-      email: d.email_solicitante || 'contacto@empresa.com',
+      nombre_solicitante: nombreSolicitante,
+      nombre: nombreSolicitante,
+      email_solicitante: emailSolicitante,
+      email: emailSolicitante,
       telefono: d.telefono_solicitante || '',
       tipo_solicitud: d.tipo_solicitud || 'Petición',
       prioridad: d.prioridad_sugerida || 'Media',
-      area: d.area_sugerida || 'Soporte Técnico y Sistemas',
+      departamento: areaSugerida,
+      area: areaSugerida,
       asunto: d.asunto || 'Requerimiento digitalizado por Visión IA',
       descripcion: d.descripcion || 'Digitalización y radicación directa desde Chatbot',
     };

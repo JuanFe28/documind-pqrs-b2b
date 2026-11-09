@@ -41,6 +41,11 @@ export default function DigitalizacionVision() {
   const [radicadoExitoso, setRadicadoExitoso] = useState(null);
   const [copiado, setCopiado] = useState(false);
 
+  // Autorización de tratamiento de datos personales (Ley 1581 de 2012)
+  const [autorizacionDatos, setAutorizacionDatos] = useState(false);
+  // Confirmación explícita de revisión de campos con baja confianza
+  const [revisionConfirmada, setRevisionConfirmada] = useState(false);
+
   // Manejo de selección de archivo de imagen o PDF
   const handleSeleccionarArchivo = (e) => {
     const file = e.target.files?.[0];
@@ -50,6 +55,7 @@ export default function DigitalizacionVision() {
     setResultadoVision(null);
     setRadicadoExitoso(null);
     setErrorMsg('');
+    setRevisionConfirmada(false);
 
     if (file.type.startsWith('image/')) {
       const url = URL.createObjectURL(file);
@@ -102,6 +108,14 @@ export default function DigitalizacionVision() {
   // Disparo del proceso de negocio nativo en Express (Ruta A)
   const handleConfirmarYRadicar = async (e) => {
     e.preventDefault();
+    if (!autorizacionDatos) {
+      setErrorMsg('Debe autorizar el tratamiento de sus datos personales (Ley 1581 de 2012) para radicar.');
+      return;
+    }
+    if (resultadoVision?.requiere_revision_humana && !revisionConfirmada) {
+      setErrorMsg('Debe confirmar que revisó y corrigió manualmente los campos con confianza menor al 85%.');
+      return;
+    }
     setRadicando(true);
     setErrorMsg('');
 
@@ -343,6 +357,8 @@ export default function DigitalizacionVision() {
                     setPreviewUrl(null);
                     setResultadoVision(null);
                     setRadicadoExitoso(null);
+                    setAutorizacionDatos(false);
+                    setRevisionConfirmada(false);
                   }}
                   className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-semibold transition-colors"
                 >
@@ -456,9 +472,41 @@ export default function DigitalizacionVision() {
                   />
                 </div>
 
+                <label className="flex items-start gap-2.5 text-xs text-slate-300 bg-slate-950/60 border border-slate-700 rounded-xl p-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autorizacionDatos}
+                    onChange={(e) => setAutorizacionDatos(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-indigo-500 flex-shrink-0"
+                  />
+                  <span>
+                    Autorizo el tratamiento de mis datos personales conforme a la <strong>Ley 1581 de 2012</strong> y la política de privacidad de la entidad.
+                  </span>
+                </label>
+
+                {resultadoVision?.requiere_revision_humana && (
+                  <label className="flex items-start gap-2.5 text-xs text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={revisionConfirmada}
+                      onChange={(e) => setRevisionConfirmada(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 accent-amber-500 flex-shrink-0"
+                    />
+                    <span>
+                      Confirmo que he revisado y corregido manualmente los campos con confianza menor al 85%.
+                    </span>
+                  </label>
+                )}
+
                 <button
                   type="submit"
-                  disabled={radicando || !camposEditados.asunto || !camposEditados.descripcion}
+                  disabled={
+                    radicando ||
+                    !camposEditados.asunto ||
+                    !camposEditados.descripcion ||
+                    !autorizacionDatos ||
+                    (resultadoVision?.requiere_revision_humana && !revisionConfirmada)
+                  }
                   className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 transition-all mt-4"
                 >
                   {radicando ? (

@@ -1,8 +1,10 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import { GoogleGenAI } from '@google/genai';
 import { generarEmbeddingGoogle } from '../services/gemini.service.js';
 import { queryVectores } from '../services/pinecone.service.js';
 import { procesarFormularioConVision } from '../services/vision.service.js';
+import { registrarAccesoVision } from './vision.controller.js';
 import db from '../config/db.js';
 import { getSecret } from '../utils/secrets.js';
 
@@ -168,62 +170,140 @@ export async function consultarRAG(req, res) {
       }
     }
 
-    // 1. Vectorizar la consulta y buscar contexto en Pinecone con filtro estricto
-    // 1. Vectorizar la consulta y buscar contexto en Pinecone con filtro estricto
-    const queryVector = await generarEmbeddingGoogle(query);
-    const topK = 24; // Amplio para capturar fragmentos de múltiples documentos a la vez
-    let matches = await queryVectores(queryVector, targetRepoFilter, topK);
-
-    // Resiliencia para consultas comparativas o multi-repositorio: si el filtro de repositorio específico
-    // arrojó pocos fragmentos (< 4) o solo de un documento, complementar con los repositorios autorizados
-    if (targetRepoFilter && matches.length < 5) {
+    // Recuperar los últimos 6 mensajes del hilo como contexto conversacional
+    let contextoConversacional = '';
+    if (thread_id) {
       try {
-        const broaderMatches = await queryVectores(queryVector, authorizedRepoIds, topK);
-        const existingIds = new Set(matches.map((m) => m.id));
-        for (const bm of broaderMatches) {
-          if (!existingIds.has(bm.id)) {
-            matches.push(bm);
-          }
-        }
-      } catch (broaderErr) {
-        console.warn('[Chat RAG] Búsqueda complementaria advierte:', broaderErr.message);
-      }
-    }
-
-    // Defensa en profundidad: garantizar que ningún fragmento no autorizado se filtre
-    if (authorizedRepoIds && authorizedRepoIds.length > 0) {
-      matches = matches.filter((m) => {
-        const docRepoId = Number(m.metadata?.repositorio_id);
-        return authorizedRepoIds.includes(docRepoId);
-      });
-    }
-
-    const MIN_SCORE = 0.48; // Umbral de similitud óptimo para comparaciones
-    let relevantMatches = matches.filter((m) => m.score >= MIN_SCORE);
-
-    // Validación estricta de existencia y vigencia del documento en PostgreSQL (defensa contra vectores huérfanos)
-    if (relevantMatches.length > 0) {
-      const docIds = [...new Set(relevantMatches.map((m) => Number(m.metadata?.documento_id)).filter((id) => !isNaN(id) && id > 0))];
-      if (docIds.length > 0) {
-        const placeholders = docIds.map(() => '?').join(', ');
-        const docsValidos = await db.query(
-          `SELECT id FROM documentos WHERE id IN (${placeholders}) AND estado_procesamiento = 'COMPLETADO'`,
-          docIds
+        const historial = await db.query(
+          'SELECT rol, contenido FROM chat_messages WHERE thread_id = ? ORDER BY creado_en DESC, id DESC LIMIT 6',
+          [thread_id]
         );
-        const idsValidos = new Set(docsValidos.map((d) => Number(d.id)));
-        relevantMatches = relevantMatches.filter((m) => idsValidos.has(Number(m.metadata?.documento_id)));
-      } else {
-        relevantMatches = [];
+        if (historial && historial.length > 0) {
+          contextoConversacional = historial
+            .slice()
+            .reverse()
+            .map((m) => `${m.rol === 'user' ? 'Usuario' : 'Asistente'}: ${m.contenido}`)
+            .join('\n');
+        }
+      } catch (histErr) {
+        console.warn('[Chat RAG] No se pudo recuperar el historial conversacional:', histErr.message);
       }
+    }
+
+    // 1. Vectorizar la consulta y buscar contexto en Pinecone con filtro estricto.
+    // Si falla el embedding o Pinecone, se activa un fallback léxico contra la tabla documentos.
+    let relevantMatches = [];
+
+    const buscarContextoLexico = async () => {
+      try {
+        const terminos = query
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+          .split(/\s+/)
+          .filter((t) => t.length >= 4)
+          .slice(0, 6);
+
+        const condiciones = [];
+        const parametros = [];
+        for (const termino of terminos) {
+          condiciones.push(
+            "(LOWER(COALESCE(nombre_archivo, '')) LIKE ? OR LOWER(COALESCE(resumen_ia, '')) LIKE ? OR LOWER(COALESCE(categoria_detectada, '')) LIKE ?)"
+          );
+          const patron = `%${termino}%`;
+          parametros.push(patron, patron, patron);
+        }
+
+        let sql = `SELECT id, nombre_archivo, repositorio_id, categoria_detectada, resumen_ia
+                   FROM documentos
+                   WHERE estado_procesamiento = 'COMPLETADO'`;
+        if (condiciones.length > 0) sql += ` AND (${condiciones.join(' OR ')})`;
+        if (authorizedRepoIds && authorizedRepoIds.length > 0) {
+          sql += ` AND repositorio_id IN (${authorizedRepoIds.map(() => '?').join(', ')})`;
+          parametros.push(...authorizedRepoIds);
+        }
+        sql += ' ORDER BY id DESC LIMIT 8';
+
+        const filas = await db.query(sql, parametros);
+        return (filas || []).map((fila) => ({
+          id: `lexico-${fila.id}`,
+          score: 0.5,
+          metadata: {
+            documento_id: fila.id,
+            nombre_archivo: fila.nombre_archivo,
+            page_num: 1,
+            text_chunk: fila.resumen_ia || `Documento clasificado como ${fila.categoria_detectada || 'general'}.`,
+            repositorio_id: fila.repositorio_id,
+          },
+        }));
+      } catch (lexErr) {
+        console.warn('[Chat RAG] Fallback léxico no pudo consultar documentos:', lexErr.message);
+        return [];
+      }
+    };
+
+    try {
+      const queryVector = await generarEmbeddingGoogle(query);
+      const topK = 24; // Amplio para capturar fragmentos de múltiples documentos a la vez
+      let matches = await queryVectores(queryVector, targetRepoFilter, topK);
+
+      // Resiliencia para consultas comparativas o multi-repositorio
+      if (targetRepoFilter && matches.length < 5) {
+        try {
+          const broaderMatches = await queryVectores(queryVector, authorizedRepoIds, topK);
+          const existingIds = new Set(matches.map((m) => m.id));
+          for (const bm of broaderMatches) {
+            if (!existingIds.has(bm.id)) {
+              matches.push(bm);
+            }
+          }
+        } catch (broaderErr) {
+          console.warn('[Chat RAG] Búsqueda complementaria advierte:', broaderErr.message);
+        }
+      }
+
+      // Defensa en profundidad: garantizar que ningún fragmento no autorizado se filtre
+      if (authorizedRepoIds && authorizedRepoIds.length > 0) {
+        matches = matches.filter((m) => {
+          const docRepoId = Number(m.metadata?.repositorio_id);
+          return authorizedRepoIds.includes(docRepoId);
+        });
+      }
+
+      const MIN_SCORE = 0.48; // Umbral de similitud óptimo para comparaciones
+      relevantMatches = matches.filter((m) => m.score >= MIN_SCORE);
+
+      // Validación estricta de existencia y vigencia del documento (vectores huérfanos)
+      if (relevantMatches.length > 0) {
+        const docIds = [...new Set(relevantMatches.map((m) => Number(m.metadata?.documento_id)).filter((id) => !isNaN(id) && id > 0))];
+        if (docIds.length > 0) {
+          const placeholders = docIds.map(() => '?').join(', ');
+          const docsValidos = await db.query(
+            `SELECT id FROM documentos WHERE id IN (${placeholders}) AND estado_procesamiento = 'COMPLETADO'`,
+            docIds
+          );
+          const idsValidos = new Set(docsValidos.map((d) => Number(d.id)));
+          relevantMatches = relevantMatches.filter((m) => idsValidos.has(Number(m.metadata?.documento_id)));
+        } else {
+          relevantMatches = [];
+        }
+      }
+
+      // Si Pinecone no devolvió coincidencias útiles, intentar búsqueda léxica en BD
+      if (relevantMatches.length === 0) {
+        relevantMatches = await buscarContextoLexico();
+      }
+    } catch (vectorErr) {
+      console.warn('[Chat RAG] Fallback léxico activado (embedding/Pinecone no disponible):', vectorErr.message);
+      relevantMatches = await buscarContextoLexico();
     }
 
     let contextoDocumental = '';
     if (relevantMatches.length > 0) {
       contextoDocumental = relevantMatches
-        .map(
-          (match) =>
-            `[Documento: ${match.metadata.nombre_archivo} | Pág: ${match.metadata.page_num}]:\n"${match.metadata.text_chunk}"`
-        )
+        .map((match) => {
+          const meta = match.metadata || {};
+          return `[Documento: ${meta.nombre_archivo || 'Sin nombre'} | Pág: ${meta.page_num || 1}]:\n"${meta.text_chunk || ''}"`;
+        })
         .join('\n\n');
     }
 
@@ -254,7 +334,10 @@ export async function consultarRAG(req, res) {
       ${contextoDocumental ? `DOCUMENTOS RELEVANTES ENCONTRADOS EN EL SISTEMA:\n${contextoDocumental}` : 'NOTA: No se hallaron documentos específicos con alta similitud para esta consulta. Inicia tu respuesta indicando de manera honesta y explícita: "No he encontrado información relevante en los documentos cargados para responder a tu consulta." Luego puedes brindar una orientación general breve si corresponde.'}
     `;
 
-    // 3. Generación con failover multi-modelo
+    // 3. Generación con failover multi-modelo (incluye contexto conversacional del hilo)
+    const preguntaConContexto = contextoConversacional
+      ? `Contexto conversacional previo:\n${contextoConversacional}\n\nPregunta actual del usuario:\n${query}`
+      : query;
     let respuestaTexto = '';
     let generadoPorIA = false;
 
@@ -263,7 +346,7 @@ export async function consultarRAG(req, res) {
         const chatResponse = await conTimeout(
           ai.models.generateContent({
             model: modelName,
-            contents: [{ role: 'user', parts: [{ text: query }] }],
+            contents: [{ role: 'user', parts: [{ text: preguntaConContexto }] }],
             config: {
               systemInstruction: systemPrompt,
               temperature: 0.7,
@@ -401,7 +484,22 @@ export async function crearThread(req, res) {
 export async function listarMensajes(req, res) {
   try {
     const { threadId } = req.params;
-    
+
+    // Prevención de IDOR: el hilo debe existir y pertenecer al usuario (salvo ADMIN)
+    const threads = await db.query(
+      'SELECT id, usuario_id FROM chat_threads WHERE id = ? LIMIT 1',
+      [threadId]
+    );
+    if (!threads || threads.length === 0) {
+      return res.status(404).json({ ok: false, mensaje: 'Hilo de chat no encontrado.' });
+    }
+
+    const esAdmin = (req.user?.rol || '').toUpperCase() === 'ADMIN';
+    const propietario = Number(threads[0].usuario_id);
+    if (!esAdmin && propietario !== Number(req.user?.id)) {
+      return res.status(403).json({ ok: false, mensaje: 'No tiene permisos para acceder a este hilo.' });
+    }
+
     const mensajes = await db.query(
       'SELECT * FROM chat_messages WHERE thread_id = ? ORDER BY creado_en ASC',
       [threadId]
@@ -451,7 +549,7 @@ export async function eliminarThread(req, res) {
 }
 
 /**
- * POST /api/chat/multimodal
+ * POST /api/chat/multimodal (alias: POST /api/chat/con-imagen)
  * Procesa una imagen o evidencia física dentro del Chatbot conversacional
  * con el módulo de Visión Multimodal (Gemini + Plan B), retornando interpretación
  * estructurada y habilitando el disparo directo a radicación PQRS.
@@ -466,6 +564,7 @@ export async function consultarChatConImagen(req, res) {
     const usuarioId = req.user?.email || req.user?.nombre || 'USUARIO_CHAT';
     const file = req.file;
     const fileBuffer = fs.readFileSync(file.path);
+    const sha256 = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
     const resultadoVision = await procesarFormularioConVision(
       fileBuffer,
@@ -529,10 +628,15 @@ export async function consultarChatConImagen(req, res) {
       }
     }
 
-    // Limpiar archivo temporal subido
-    try {
-      fs.unlinkSync(file.path);
-    } catch (_) {}
+    // Conservar el archivo bajo el control de acceso de /uploads (trazabilidad y auditoría)
+    registrarAccesoVision({
+      archivo: file.filename,
+      nombre_original: file.originalname,
+      sha256,
+      subido_por: usuarioId,
+      rol: req.user?.rol || 'ANONIMO',
+      fecha_subida: new Date().toISOString(),
+    });
 
     return res.status(200).json({
       ok: true,
@@ -544,6 +648,10 @@ export async function consultarChatConImagen(req, res) {
           nombre: file.originalname,
           tamano_bytes: file.size,
           mimetype: file.mimetype,
+          sha256,
+          url_protegida: `/api/vision/archivos/${file.filename}`,
+          subido_por: req.user?.id ?? req.user?.email ?? usuarioId,
+          fecha_subida: new Date().toISOString(),
         },
       },
     });

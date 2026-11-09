@@ -1,12 +1,203 @@
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
-import app from '../app.js';
-import db from '../config/db.js';
+import bcrypt from 'bcryptjs';
+import { jest } from '@jest/globals';
+
+// ─── Aislamiento determinista de dependencias externas ───────────────────────
+// La suite debe pasar sin PostgreSQL, sin Gemini y sin Pinecone disponibles.
+// Se simula el SDK de Google (para que el pipeline use sus fallbacks heurísticos
+// y de vector hash) y se evita cualquier llamada de red a Pinecone.
+jest.unstable_mockModule('@google/genai', () => ({
+  GoogleGenAI: class GoogleGenAI {
+    constructor() {
+      this.models = {
+        generateContent: async () => {
+          throw new Error('Google GenAI no disponible en pruebas offline');
+        },
+        embedContent: async () => {
+          throw new Error('Embeddings no disponibles en pruebas offline');
+        },
+      };
+    }
+  },
+}));
+
+jest.unstable_mockModule('../services/pinecone.service.js', () => ({
+  upsertChunks: async () => {},
+  queryVectores: async () => [],
+  eliminarVectoresDocumento: async () => {},
+}));
 
 describe('Pruebas de API y Pipeline de IA - DocuMind', () => {
   let authToken;
+  let app;
+  let db;
+
+  // Estado en memoria que emula las tablas consultadas por los endpoints usados
+  // en esta suite. Permite validar el pipeline completo de ingesta y el chat RAG
+  // cuando PostgreSQL no está corriendo (ECONNREFUSED ::1:5432).
+  const repositorios = [
+    {
+      id: 1,
+      nombre: 'Repositorio Legal',
+      descripcion: 'Contratos y documentos legales',
+      departamento: 'Legal',
+      usuario_id: 4,
+      creado_en: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+    },
+  ];
+  const usuarios = [
+    {
+      id: 4,
+      nombre: 'Diana Rodríguez',
+      email: 'diana.legal@documind.com',
+      password_hash: bcrypt.hashSync('password_seguro_uts', 4),
+      rol: 'LEGAL',
+    },
+  ];
+  const documentos = [];
+  let nextDocumentoId = 1;
+
+  function crearMockDbQuery() {
+    return async (sql, params = []) => {
+      const sentencia = String(sql).replace(/\s+/g, ' ').trim();
+      const upper = sentencia.toUpperCase();
+
+      // Usuarios (login)
+      if (upper.startsWith('SELECT * FROM USUARIOS WHERE EMAIL')) {
+        const email = String(params[0] || '').toLowerCase().trim();
+        return usuarios.filter((u) => u.email.toLowerCase() === email).map((u) => ({ ...u }));
+      }
+
+      // Repositorios
+      if (upper.includes('FROM REPOSITORIOS')) {
+        if (upper.includes('WHERE ID =')) {
+          const id = Number(params[0]);
+          const repo = repositorios.find((r) => r.id === id);
+          return repo ? [{ ...repo }] : [];
+        }
+        if (upper.includes('WHERE DEPARTAMENTO =') && upper.includes('USUARIO_ID')) {
+          const [departamento, usuarioId] = params;
+          return repositorios
+            .filter(
+              (r) =>
+                r.departamento === departamento ||
+                Number(r.usuario_id) === Number(usuarioId)
+            )
+            .map((r) => ({ id: r.id }));
+        }
+        return repositorios.map((r) => ({ ...r }));
+      }
+
+      // Ingesta: alta de documento en estado PROCESANDO
+      if (upper.startsWith('INSERT INTO DOCUMENTOS')) {
+        const [nombre_archivo, url_descarga, tipo_formato, tamano_bytes, repositorio_id] = params;
+        const documento = {
+          id: nextDocumentoId++,
+          nombre_archivo,
+          url_descarga,
+          tipo_formato,
+          tamano_bytes,
+          estado_procesamiento: 'PROCESANDO',
+          repositorio_id: Number(repositorio_id),
+          categoria_detectada: null,
+          score_confianza: null,
+          resumen_ia: null,
+          creado_en: new Date().toISOString(),
+        };
+        documentos.push(documento);
+        return { insertId: documento.id, affectedRows: 1 };
+      }
+
+      // Ingesta: metadatos extraídos por IA
+      if (upper.startsWith('INSERT INTO METADATOS_EXTRAIDOS')) {
+        return { insertId: 1, affectedRows: 1 };
+      }
+
+      // Ingesta: actualización de estado y metadatos del documento
+      if (upper.startsWith('UPDATE DOCUMENTOS')) {
+        const id = Number(params[params.length - 1]);
+        const documento = documentos.find((d) => d.id === id);
+        if (documento) {
+          if (upper.includes("ESTADO_PROCESAMIENTO = 'COMPLETADO'")) {
+            documento.estado_procesamiento = 'COMPLETADO';
+            documento.categoria_detectada = params[0];
+            documento.score_confianza = params[1];
+            documento.resumen_ia = params[2];
+          } else if (upper.includes("ESTADO_PROCESAMIENTO = 'ERROR'")) {
+            documento.estado_procesamiento = 'ERROR';
+          }
+        }
+        return { affectedRows: documento ? 1 : 0 };
+      }
+
+      // Lectura puntual de un documento
+      if (upper.startsWith('SELECT * FROM DOCUMENTOS WHERE ID =')) {
+        const id = Number(params[0]);
+        const documento = documentos.find((d) => d.id === id);
+        return documento ? [{ ...documento }] : [];
+      }
+
+      // Búsqueda léxica de respaldo del Chat RAG
+      if (
+        upper.includes('FROM DOCUMENTOS') &&
+        upper.includes("ESTADO_PROCESAMIENTO = 'COMPLETADO'")
+      ) {
+        // Validación de vigencia de documentos provenientes de Pinecone
+        if (upper.includes('WHERE ID IN (')) {
+          const ids = params.map(Number);
+          return documentos
+            .filter((d) => ids.includes(d.id) && d.estado_procesamiento === 'COMPLETADO')
+            .map((d) => ({ id: d.id }));
+        }
+
+        let resultado = documentos.filter((d) => d.estado_procesamiento === 'COMPLETADO');
+
+        const patrones = params.filter(
+          (p) => typeof p === 'string' && p.startsWith('%') && p.endsWith('%')
+        );
+        if (patrones.length > 0) {
+          resultado = resultado.filter((d) =>
+            patrones.some((patron) => {
+              const termino = patron.slice(1, -1).toLowerCase();
+              return [d.nombre_archivo, d.resumen_ia, d.categoria_detectada].some((valor) =>
+                String(valor || '').toLowerCase().includes(termino)
+              );
+            })
+          );
+        }
+
+        const filtroRepo = sentencia.match(/REPOSITORIO_ID IN \(([^)]*)\)/i);
+        if (filtroRepo) {
+          const cantidad = (filtroRepo[1].match(/\?/g) || []).length;
+          const reposPermitidos = params.slice(-cantidad).map(Number);
+          resultado = resultado.filter((d) =>
+            reposPermitidos.includes(Number(d.repositorio_id))
+          );
+        }
+
+        return resultado
+          .sort((a, b) => b.id - a.id)
+          .slice(0, 8)
+          .map((d) => ({ ...d }));
+      }
+
+      // Registro de errores de ingesta
+      if (upper.startsWith('INSERT INTO LOGS_ERRORES')) {
+        return { insertId: 1, affectedRows: 1 };
+      }
+
+      return [];
+    };
+  }
 
   beforeAll(async () => {
+    ({ default: db } = await import('../config/db.js'));
+    // Repositorio de datos en memoria: evita cualquier conexión real a PostgreSQL.
+    db.query = crearMockDbQuery();
+
+    ({ default: app } = await import('../app.js'));
+
     // Autenticar al analista para obtener el token JWT de las pruebas
     const res = await request(app)
       .post('/api/auth/login')
@@ -15,14 +206,14 @@ describe('Pruebas de API y Pipeline de IA - DocuMind', () => {
         password: 'password_seguro_uts',
       });
     authToken = res.body?.token || jwt.sign(
-      { id: 1, nombre: 'Diana Rodríguez', email: 'diana.legal@documind.com', rol: 'LEGAL' },
-      process.env.JWT_SECRET || 'super_secret_jwt_key_documind_pqrs_2026',
+      { id: 4, nombre: 'Diana Rodríguez', email: 'diana.legal@documind.com', rol: 'LEGAL' },
+      process.env.JWT_SECRET || 'uts_clavedesarrollo_secreta_documind_2026',
       { expiresIn: '2h' }
     );
   });
 
   afterAll(async () => {
-    await db.end(); // Cerrar pool de MySQL al finalizar las pruebas
+    await db.end(); // Cerrar pool de PostgreSQL al finalizar las pruebas
   });
 
   // ─── CP-01: Inicio de sesión seguro ─────────────────────────────────────────

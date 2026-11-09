@@ -45,6 +45,8 @@ router.post('/query', consultarRAG);
 
 // Endpoint Multimodal: Análisis visual e interactivo de imágenes/formularios desde el Chat
 router.post('/multimodal', upload.single('archivo'), consultarChatConImagen);
+// Alias exigido por la guía del Tercer Corte para conservar trazabilidad de la imagen
+router.post('/con-imagen', upload.single('archivo'), consultarChatConImagen);
 
 // Endpoints de Historial de Chat
 router.get('/threads', listarThreads);

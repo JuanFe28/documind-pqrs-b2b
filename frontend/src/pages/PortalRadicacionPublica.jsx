@@ -41,6 +41,7 @@ export default function PortalRadicacionPublica() {
   const [radicadoExitoso, setRadicadoExitoso] = useState(null);
   const [tokenCopiado, setTokenCopiado] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [autorizacionDatos, setAutorizacionDatos] = useState(false);
 
   // Formulario tracking
   const [ticketQuery, setTicketQuery] = useState('');
@@ -90,6 +91,10 @@ export default function PortalRadicacionPublica() {
 
   const handleRadicar = async (e) => {
     e.preventDefault();
+    if (!autorizacionDatos) {
+      setErrorMsg('Debe autorizar el tratamiento de sus datos personales (Ley 1581 de 2012) para radicar la solicitud.');
+      return;
+    }
     setEnviando(true);
     setErrorMsg('');
 
@@ -116,7 +121,9 @@ export default function PortalRadicacionPublica() {
       // 2. Disparar webhook de radicación en n8n
       const webhookPayload = {
         request_id: crypto.randomUUID(),
+        nombre_solicitante: formData.nombre,
         nombre: formData.nombre,
+        email_solicitante: formData.email,
         email: formData.email,
         telefono: formData.telefono,
         tipo_solicitud: formData.tipo_solicitud,
@@ -399,6 +406,7 @@ export default function PortalRadicacionPublica() {
                       descripcion: '',
                     });
                     setArchivo(null);
+                    setAutorizacionDatos(false);
                   }}
                   className="px-5 py-2.5 rounded-xl bg-slate-800 text-slate-200 font-semibold text-xs hover:bg-slate-700 transition-colors"
                 >
@@ -553,10 +561,22 @@ export default function PortalRadicacionPublica() {
                   </div>
                 </div>
 
+                <label className="flex items-start gap-2.5 text-xs text-slate-300 bg-slate-950/60 border border-white/10 rounded-xl p-3.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autorizacionDatos}
+                    onChange={(e) => setAutorizacionDatos(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-indigo-500 flex-shrink-0"
+                  />
+                  <span className="leading-relaxed">
+                    Autorizo el tratamiento de mis datos personales conforme a la <strong>Ley 1581 de 2012</strong> y la política de privacidad de la entidad. *
+                  </span>
+                </label>
+
                 <button
                   type="submit"
-                  disabled={enviando}
-                  className="w-full py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white font-bold text-sm shadow-xl shadow-indigo-600/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  disabled={enviando || !autorizacionDatos}
+                  className="w-full py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white font-bold text-sm shadow-xl shadow-indigo-600/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {enviando ? (
                     <>
