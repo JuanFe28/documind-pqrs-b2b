@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, ClipboardList, Download, GitBranch, ScanLine } from 'lucide-react';
-import documentoDiseno from '../../../docs/SEMANA_1_DISENO.pdf?url';
+const documentoDiseno = '/SEMANA_1_DISENO.pdf';
 
 // Inventario de la exportación n8n auditada. No representa una prueba de conexión.
 const flujos = [
