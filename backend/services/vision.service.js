@@ -31,6 +31,33 @@ function conTimeout(promesa, ms = 15000) {
 
 const ETIQUETAS_CORTE = /\s+(?:correo|e-?mail|tel[eé]fono|celular|documento|identificaci[oó]n)\s*:/i;
 
+const PATRON_SEPARADOR = /^\s*(?:[=\-_*~#•·]\s*){3,}$/;
+const PATRON_METADATO_PLANTILLA = /^(?:identificador\s+de\s+archivo|condici[oó]n\s+de\s+captura|tipo\s+de\s+documento|datos\s+del\s+solicitante|detalles\s+de\s+la\s+solicitud|firma\s+y\s+sello|sello\s+de\s+radicaci[oó]n|formulario\s+de\s+atenci[oó]n|formato\s+institucional|fecha\s+de\s+(?:captura|radicaci[oó]n)|p[aá]gina\s+\d+|versi[oó]n\s*:)/i;
+const PATRON_CAMPO_ESTRUCTURADO = /^(?:nombre(?:\s+completo)?|correo(?:\s+electr[oó]nico)?|e-?mail|tel[eé]fono(?:\s+de\s+contacto)?|celular|m[oó]vil|identificaci[oó]n|documento(?:\s+de\s+identidad)?|tipo(?:\s+de\s+(?:solicitud|documento|requerimiento))?|prioridad(?:\s+sugerida)?|nivel\s+de\s+prioridad|urgencia|[aá]rea(?:\s+de\s+destino)?|departamento(?:\s+sugerido)?|asunto|motivo|fecha(?:\s+de\s+\w+)?|hora|radicado)\b\s*:/i;
+
+function esLineaRuidoPlantilla(linea) {
+  if (!linea) return true;
+  if (PATRON_SEPARADOR.test(linea)) return true;
+  if (PATRON_METADATO_PLANTILLA.test(linea)) return true;
+  if (PATRON_CAMPO_ESTRUCTURADO.test(linea)) return true;
+  if (/^\[?(?:inicio|fin)[_ ]bloque/i.test(linea)) return true;
+  if (/[\x00-\x08\x0E-\x1F\uFFFD]/.test(linea)) return true;
+  return false;
+}
+
+function limpiarTextoDescripcion(texto) {
+  return String(texto || '')
+    .split(/\r?\n/)
+    .map((linea) => linea.replace(/\u0000/g, ' ').trim())
+    .map((linea) => linea.replace(/^descripci[oó]n(?:\s+[^:]*?)?\s*[:\-]\s*/i, '').trim())
+    .filter((linea) => linea && !esLineaRuidoPlantilla(linea))
+    .join(' ')
+    .replace(/[=\-_*~#•·]{3,}/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s:;,.]+|[\s:;,]+$/g, '')
+    .trim();
+}
+
 function limpiarValorEtiqueta(valor) {
   if (!valor) return null;
   const limpio = String(valor).replace(/\u0000/g, ' ').replace(/\s+/g, ' ').trim();
@@ -117,25 +144,40 @@ function extraerDescripcion(lineas) {
   let capturando = false;
 
   for (const lineaOriginal of lineas) {
-    const linea = lineaOriginal.replace(/\u0000/g, ' ').trim();
+    const linea = lineaOriginal.replace(/\u0000/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!linea) continue;
 
     if (!capturando) {
       if (/^descripci[oOóÓ]n\b/i.test(linea)) {
         capturando = true;
-        const resto = linea.replace(/^descripci[oOóÓ]n[^:]*[:\-]?\s*/i, '').trim();
-        if (resto) partes.push(resto);
+        const resto = linea
+          .replace(/^descripci[oó]n(?:\s+[^:]*?)?\s*[:\-]\s*/i, '')
+          .trim();
+        if (resto && resto !== linea && !esLineaRuidoPlantilla(resto)) partes.push(resto);
       }
       continue;
     }
 
-    if (/^=+$/.test(linea) || /^firma\s+y\s+sello/i.test(linea) || /^\[?fin[_ ]bloque/i.test(linea)) {
-      break;
-    }
+    const esCierre =
+      PATRON_SEPARADOR.test(linea) ||
+      /^firma\s+y\s+sello/i.test(linea) ||
+      /^sello\s+de\s+radicaci[oó]n/i.test(linea) ||
+      /^datos\s+del\s+solicitante\b/i.test(linea) ||
+      /^detalles\s+de\s+la\s+solicitud\b/i.test(linea) ||
+      /^\[?fin[_ ]bloque/i.test(linea);
+    if (esCierre) break;
+
     if (/[\x00-\x08\x0E-\x1F]/.test(linea)) break;
-    if (linea) partes.push(linea);
+    if (esLineaRuidoPlantilla(linea)) continue;
+    partes.push(linea);
   }
 
-  return partes.join(' ').replace(/\s+/g, ' ').trim();
+  return partes
+    .join(' ')
+    .replace(/[=\-_*~#•·]{3,}/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s:;,.]+|[\s:;,]+$/g, '')
+    .trim();
 }
 
 /**
@@ -187,6 +229,7 @@ function ejecutarPlanBHeuristico(buffer, mimeType, nombreArchivo = '') {
   ]);
 
   const descripcionExtraida = extraerDescripcion(lineas);
+  const transcripcionLimpia = descripcionExtraida || limpiarTextoDescripcion(textoExtraido);
 
   let tipoDetectado = tipoExplicit || 'Petición';
   if (!tipoExplicit) {
@@ -236,8 +279,8 @@ function ejecutarPlanBHeuristico(buffer, mimeType, nombreArchivo = '') {
       prioridad_sugerida: prioridadDetectada,
       area_sugerida: depto,
       asunto: asuntoLinea || `Digitalización física: ${nombreArchivo || 'Formulario PQRS'}`,
-      descripcion: descripcionExtraida || (textoExtraido.length > 20
-        ? `[Transcripción Formulario]: ${textoExtraido.slice(0, 500)}`
+      descripcion: descripcionExtraida || (transcripcionLimpia.length > 20
+        ? transcripcionLimpia.slice(0, 500)
         : 'Formulario físico digitalizado pendiente de confirmación manual de contenido por el agente.'),
     },
   };
@@ -291,7 +334,7 @@ Debes responder ÚNICAMENTE un bloque de código JSON con este esquema exacto:
   "prioridad_sugerida": "Uno de: Baja, Media, Alta, Crítica",
   "area_sugerida": "Uno de: Soporte Técnico y Sistemas, Facturación y Cobranzas, Control de Calidad y Garantías",
   "asunto": "Resumen conciso y profesional del caso (máximo 120 caracteres)",
-  "descripcion": "Transcripción clara y detallada de la solicitud o motivo del reporte",
+  "descripcion": "Redacción limpia, concisa, profesional y en lenguaje natural del motivo del reclamo, queja, petición, sugerencia o problema reportado (2 a 4 oraciones). No copies encabezados de plantilla, sellos, metadatos técnicos, identificadores de archivo, condiciones de captura ni separadores.",
   "detalles_visibles": ["Sellos encontrados", "Números de radicado impresos", "Fechas detectadas", "Averías o firmas"],
   "score_confianza": 0.92,
   "confianza_por_campo": {
@@ -309,13 +352,20 @@ Reglas estrictas:
 1. El "score_confianza" es un número decimal entre 0.00 y 1.00 que refleja la legibilidad visual, nitidez e integridad de los datos.
 2. Si la foto tiene poca luz, inclinación severa o letra difícil de leer, reduce la confianza correspondiente y añade advertencias en el arreglo "advertencias".
 3. Si un campo no es visible o está ausente, coloca null y añade una advertencia.
-4. NO agregues texto conversacional fuera del JSON.
+4. La "descripcion" debe ser una redacción propia, limpia, concisa, profesional y en lenguaje natural que explique el motivo del reclamo o problema, sin incluir encabezados de plantilla, sellos, metadatos técnicos, identificadores o nombres de archivo, condiciones de captura ni separadores (===, ---).
+5. NO agregues texto conversacional fuera del JSON.
 `;
 
     // Invocación a Gemini Vision con soporte multimodal y fallback secuencial de modelos
-    const modelos = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash'];
+    const modelos = [
+      'gemini-2.5-flash',
+      'gemini-3.8-flash',
+      'gemini-3.5-flash',
+      'gemini-2.5-flash-lite',
+      'gemini-flash-latest',
+    ];
     let response = null;
-    let modeloExitoso = 'gemini-2.0-flash';
+    let modeloExitoso = 'gemini-2.5-flash';
 
     for (const mod of modelos) {
       try {

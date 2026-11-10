@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Brain, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -132,15 +132,15 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Divider */}
-          <div className="mt-6 pt-6 border-t border-white/5 text-center">
-            <Link to="/semana-1" className="mb-4 block text-sm font-medium text-cyan-300 hover:text-cyan-200 hover:underline">
-              Ver entrega de semana 1
-            </Link>
-            <p className="text-slate-600 text-xs">
-              DocuMind v1.0 — Proyecto Integrador UTS
+          {/* Footer */}
+          <div className="mt-6 pt-6 border-t border-white/5 text-center space-y-1">
+            <p className="text-slate-500 text-xs font-medium">
+              DocuMind v1.0 — Sistema Inteligente de Gestión Documental
             </p>
-            <p className="text-slate-700 text-[10px] mt-1">
+            <p className="text-slate-600 text-[10px]">
+              © {new Date().getFullYear()} DocuMind. Todos los derechos reservados.
+            </p>
+            <p className="text-slate-700 text-[10px]">
               Powered by Gemini AI · Pinecone Vector DB
             </p>
           </div>

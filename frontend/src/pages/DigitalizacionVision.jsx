@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Camera,
   UploadCloud,
@@ -6,17 +6,96 @@ import {
   CheckCircle2,
   AlertTriangle,
   FileText,
-  ArrowRight,
   ShieldCheck,
   RefreshCw,
-  Clock,
   Send,
   Sliders,
   Check,
   Copy,
   Layers,
+  Wand2,
 } from 'lucide-react';
 import axios from 'axios';
+
+const MUESTRAS_DEMO = [
+  {
+    id: 'soporte',
+    etiqueta: 'Muestra 1: Soporte Técnico',
+    detalle: 'PQRS por falla de conectividad',
+    url: '/muestras/01_soporte.jpg',
+    nombre: 'muestra_soporte_tecnico.jpg',
+  },
+  {
+    id: 'facturacion',
+    etiqueta: 'Muestra 2: Facturación Duplicada',
+    detalle: 'Reclamo por cobro repetido',
+    url: '/muestras/02_facturacion.jpg',
+    nombre: 'muestra_facturacion_duplicada.jpg',
+  },
+  {
+    id: 'garantia',
+    etiqueta: 'Muestra 3: Garantía Hardware',
+    detalle: 'Solicitud de cambio de equipo',
+    url: '/muestras/03_garantia.jpg',
+    nombre: 'muestra_garantia_hardware.jpg',
+  },
+];
+
+const CAMPOS_INICIALES = {
+  nombre_solicitante: '',
+  email_solicitante: '',
+  telefono_solicitante: '',
+  tipo_solicitud: 'Petición',
+  prioridad_sugerida: 'Media',
+  area_sugerida: 'Soporte Técnico y Sistemas',
+  asunto: '',
+  descripcion: '',
+};
+
+/**
+ * Normaliza espacios, elimina la etiqueta "Descripción:" y descarta
+ * frases repetidas conservando la primera aparición.
+ */
+function limpiarDescripcion(texto) {
+  if (!texto) return '';
+
+  const sinEtiqueta = String(texto)
+    .replace(/\r/g, '')
+    .replace(/^\s*(?:descripci[oó]n|detalle|motivo)\s*[:\-]\s*/i, '')
+    .trim();
+
+  const fragmentos = sinEtiqueta
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((fragmento) => fragmento.trim())
+    .filter(Boolean);
+
+  const vistos = new Set();
+  const unicos = [];
+
+  for (const fragmento of fragmentos) {
+    const clave = fragmento
+      .toLowerCase()
+      .replace(/[^a-z0-9áéíóúüñ]+/gi, ' ')
+      .trim();
+    if (!clave || vistos.has(clave)) continue;
+    vistos.add(clave);
+    unicos.push(fragmento);
+  }
+
+  const resultado = unicos
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .trim();
+
+  return resultado || sinEtiqueta.replace(/\s+/g, ' ').trim();
+}
+
+function descripcionTieneRepeticion(texto) {
+  const normalizado = String(texto || '').replace(/\s+/g, ' ').trim();
+  if (!normalizado) return false;
+  return limpiarDescripcion(normalizado) !== normalizado;
+}
 
 export default function DigitalizacionVision() {
   const [archivo, setArchivo] = useState(null);
@@ -24,18 +103,19 @@ export default function DigitalizacionVision() {
   const [procesando, setProcesando] = useState(false);
   const [resultadoVision, setResultadoVision] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const [cargandoMuestra, setCargandoMuestra] = useState(null);
 
   // Campos editables del formulario tras extracción de visión (Human-in-the-Loop)
-  const [camposEditados, setCamposEditados] = useState({
-    nombre_solicitante: '',
-    email_solicitante: '',
-    telefono_solicitante: '',
-    tipo_solicitud: 'Petición',
-    prioridad_sugerida: 'Media',
-    area_sugerida: 'Soporte Técnico y Sistemas',
-    asunto: '',
-    descripcion: '',
-  });
+  const [camposEditados, setCamposEditados] = useState({ ...CAMPOS_INICIALES });
+
+  const descripcionLegible = useMemo(
+    () => limpiarDescripcion(camposEditados.descripcion),
+    [camposEditados.descripcion]
+  );
+  const mostrarLimpiarFormato = useMemo(
+    () => descripcionTieneRepeticion(camposEditados.descripcion),
+    [camposEditados.descripcion]
+  );
 
   const [radicando, setRadicando] = useState(false);
   const [radicadoExitoso, setRadicadoExitoso] = useState(null);
@@ -63,6 +143,48 @@ export default function DigitalizacionVision() {
     } else {
       setPreviewUrl(null);
     }
+  };
+
+  // Carga una muestra de demostración desde /public/muestras y la convierte en File
+  const handleCargarMuestra = async (muestra) => {
+    setCargandoMuestra(muestra.id);
+    setErrorMsg('');
+
+    try {
+      const respuesta = await fetch(muestra.url, { cache: 'no-store' });
+      if (!respuesta.ok) {
+        throw new Error(`No se pudo obtener la muestra (HTTP ${respuesta.status}).`);
+      }
+
+      const blob = await respuesta.blob();
+      const archivoMuestra = new File([blob], muestra.nombre, {
+        type: blob.type || 'image/jpeg',
+        lastModified: Date.now(),
+      });
+
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+
+      setArchivo(archivoMuestra);
+      setPreviewUrl(URL.createObjectURL(archivoMuestra));
+      setResultadoVision(null);
+      setRadicadoExitoso(null);
+      setRevisionConfirmada(false);
+      setCamposEditados({ ...CAMPOS_INICIALES });
+    } catch (err) {
+      console.error('Error al cargar muestra de demostración:', err);
+      setErrorMsg(
+        'No se pudo cargar la muestra de demostración. Verifique que las imágenes estén disponibles en /muestras/.'
+      );
+    } finally {
+      setCargandoMuestra(null);
+    }
+  };
+
+  const handleLimpiarFormato = () => {
+    setCamposEditados((prev) => ({
+      ...prev,
+      descripcion: limpiarDescripcion(prev.descripcion),
+    }));
   };
 
   // Procesamiento con IA Multimodal
@@ -185,6 +307,61 @@ export default function DigitalizacionVision() {
         </div>
       )}
 
+      {/* Barra de pruebas rápidas para demostración */}
+      <div className="bg-slate-900/80 border border-indigo-500/30 rounded-2xl p-5 sm:p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+          <div className="space-y-1">
+            <h2 className="text-sm font-bold text-white flex items-center gap-2">
+              <Layers className="w-4 h-4 text-indigo-400" />
+              Formularios y Fotos de Prueba para Demostración
+            </h2>
+            <p className="text-xs text-slate-400 max-w-2xl">
+              Seleccione una muestra con un clic y luego pulse{' '}
+              <strong className="text-slate-200">Analizar con Visión por Computador</strong>. No necesita buscar
+              archivos en su equipo: las imágenes ya están disponibles en la aplicación.
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-semibold text-indigo-300 uppercase tracking-wide flex-shrink-0">
+            <Sparkles className="w-3 h-3" /> Demo guiada
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {MUESTRAS_DEMO.map((muestra) => {
+            const activa = archivo?.name === muestra.nombre;
+            const cargando = cargandoMuestra === muestra.id;
+
+            return (
+              <button
+                key={muestra.id}
+                type="button"
+                onClick={() => handleCargarMuestra(muestra)}
+                disabled={Boolean(cargandoMuestra) || procesando}
+                className={`group flex items-center gap-3 p-3.5 rounded-xl border text-left transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
+                  activa
+                    ? 'border-indigo-500/60 bg-indigo-500/10'
+                    : 'border-slate-700 bg-slate-950/50 hover:border-indigo-500/40 hover:bg-slate-800/60'
+                }`}
+              >
+                <span className="w-9 h-9 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center flex-shrink-0">
+                  {cargando ? (
+                    <RefreshCw className="w-4 h-4 text-indigo-300 animate-spin" />
+                  ) : activa ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <FileText className="w-4 h-4 text-indigo-300" />
+                  )}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-xs font-semibold text-slate-100 truncate">{muestra.etiqueta}</span>
+                  <span className="block text-[10px] text-slate-400 truncate">{muestra.detalle}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Área Principal de Trabajo: Carga vs Extracción */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
@@ -196,7 +373,8 @@ export default function DigitalizacionVision() {
               1. Capturar Formulario Físico
             </h2>
             <p className="text-xs text-slate-400">
-              Formatos soportados: JPG, PNG, WebP o PDF escaneado (hasta 15 MB).
+              Formatos soportados: JPG, PNG, WebP o PDF escaneado (hasta 15 MB). También puede cargar una
+              muestra de demostración desde la barra superior.
             </p>
 
             <div className="border-2 border-dashed border-slate-700 hover:border-indigo-500/60 rounded-xl p-6 text-center transition-all bg-slate-950/40 relative group">
@@ -460,16 +638,58 @@ export default function DigitalizacionVision() {
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300">Descripción Extraída del Documento</label>
+                <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/40 p-3.5">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                    <div>
+                      <label
+                        htmlFor="descripcion-extraida"
+                        className="text-xs font-semibold text-slate-300"
+                      >
+                        Descripción Extraída del Documento
+                      </label>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Texto transcrito por la IA. Verifique que sea claro y completo; puede editarlo
+                        antes de radicar.
+                      </p>
+                    </div>
+                    {mostrarLimpiarFormato && (
+                      <button
+                        type="button"
+                        onClick={handleLimpiarFormato}
+                        title="Elimina frases repetidas y normaliza los espacios"
+                        className="inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-[11px] font-semibold text-indigo-300 hover:bg-indigo-500/20 transition-colors flex-shrink-0"
+                      >
+                        <Wand2 className="w-3.5 h-3.5" />
+                        Limpiar formato
+                      </button>
+                    )}
+                  </div>
+
                   <textarea
+                    id="descripcion-extraida"
                     rows={4}
                     required
+                    aria-describedby="descripcion-ayuda"
                     value={camposEditados.descripcion}
                     onChange={(e) => setCamposEditados({ ...camposEditados, descripcion: e.target.value })}
-                    placeholder="Detalles extraídos del formulario físico..."
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500"
+                    placeholder="Ej. El usuario reporta fallas de conectividad desde el 12 de mayo y solicita revisión del servicio..."
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                   />
+
+                  <div
+                    id="descripcion-ayuda"
+                    className="rounded-lg bg-slate-900/80 border border-slate-800 px-3 py-2 text-[11px] text-slate-400 leading-relaxed"
+                  >
+                    <span className="font-semibold text-slate-300">Vista legible: </span>
+                    {descripcionLegible ||
+                      'Aún no hay una descripción extraída. Cargue una muestra o procese un formulario para verla aquí.'}
+                    {mostrarLimpiarFormato && (
+                      <span className="block mt-1 text-amber-400/90">
+                        Se detectó texto repetido o espacios innecesarios. Use «Limpiar formato» para
+                        normalizar la descripción.
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <label className="flex items-start gap-2.5 text-xs text-slate-300 bg-slate-950/60 border border-slate-700 rounded-xl p-3 cursor-pointer">

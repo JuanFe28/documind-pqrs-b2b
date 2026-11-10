@@ -2,8 +2,14 @@ import request from 'supertest';
 import app from '../app.js';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { jest } from '@jest/globals';
 import db from '../config/db.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import {
   evaluarSla,
   clasificarDepartamento,
@@ -442,6 +448,40 @@ describe('Motor de Automatización Nativo en Código (Ruta A) y Visión Multimod
 
       spyMedia.mockRestore();
     });
+  });
+
+  describe('Calidad de Extracción de Descripción y Formularios Demo', () => {
+    test('extraerDescripcion en Plan B limpia separadores y encabezados de plantilla', async () => {
+      const rutaImg = path.join(__dirname, '../../tests/fixtures/vision/imagenes/01_formulario_facturacion_luz_natural.jpg');
+      const buffer = fs.readFileSync(rutaImg);
+      const resultado = await procesarFormularioConVision(buffer, 'image/jpeg', '01_formulario_facturacion_luz_natural.jpg', 'AGENTE_TEST');
+
+      expect(resultado).toBeDefined();
+      expect(resultado.datos_extraidos.nombre_solicitante).toBe('Alejandro Gómez Valencia');
+      expect(resultado.datos_extraidos.descripcion).toBeTruthy();
+      expect(resultado.datos_extraidos.descripcion).not.toMatch(/={3,}|-{3,}/);
+      expect(resultado.datos_extraidos.descripcion).not.toMatch(/Identificador de Archivo|Condición de Captura|DATOS DEL SOLICITANTE/i);
+    }, 30000);
+
+    test('Endpoint POST /api/vision/procesar-formulario procesa archivo real y retorna url_protegida', async () => {
+      const token = jwt.sign(
+        { id: 1, nombre: 'Admin DocuMind', email: 'admin@documind.com', rol: 'ADMIN' },
+        process.env.JWT_SECRET || 'uts_clavedesarrollo_secreta_documind_2026',
+        { expiresIn: '1h' }
+      );
+
+      const rutaImg = path.join(__dirname, '../../tests/fixtures/vision/imagenes/02_formulario_soporte_inclinacion_leve.jpg');
+      const res = await request(app)
+        .post('/api/vision/procesar-formulario')
+        .set('Authorization', `Bearer ${token}`)
+        .attach('archivo', rutaImg);
+
+      expect(res.status).toBe(200);
+      expect(res.body.ok).toBe(true);
+      expect(res.body.datos_extraidos).toBeDefined();
+      expect(res.body.archivo?.url_protegida).toMatch(/^\/api\/vision\/archivos\//);
+      expect(res.body.archivo?.sha256).toMatch(/^[a-f0-9]{64}$/);
+    }, 30000);
   });
 
 });
