@@ -7,6 +7,7 @@ import { procesarFormularioConVision } from '../services/vision.service.js';
 import { registrarAccesoVision } from './vision.controller.js';
 import db from '../config/db.js';
 import { getSecret } from '../utils/secrets.js';
+import { GEMINI_FLASH_MODELS } from '../config/geminiModels.js';
 
 const geminiApiKey = getSecret('GEMINI_API_KEY', {
   defaultValue: process.env.GEMINI_API_KEY || null,
@@ -14,13 +15,7 @@ const geminiApiKey = getSecret('GEMINI_API_KEY', {
 });
 const ai = new GoogleGenAI({ apiKey: geminiApiKey || '' });
 
-const CANDIDATE_MODELS = [
-  'gemini-2.5-flash',
-  'gemini-3.8-flash',
-  'gemini-3.5-flash',
-  'gemini-2.5-flash-lite',
-  'gemini-flash-latest',
-];
+const CANDIDATE_MODELS = GEMINI_FLASH_MODELS;
 
 function conTimeout(promesa, ms = 7000) {
   let timer;

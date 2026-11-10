@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { getSecret } from '../utils/secrets.js';
+import { GEMINI_FLASH_MODELS } from '../config/geminiModels.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -325,13 +326,7 @@ export async function analizarDocumentoConGemini(textoPlano) {
     required: ['categoria_detectada', 'score_confianza', 'resumen_ia', 'metadatos'],
   };
 
-  const candidateModels = [
-    'gemini-2.5-flash',
-    'gemini-3.8-flash',
-    'gemini-3.5-flash',
-    'gemini-2.5-flash-lite',
-    'gemini-flash-latest',
-  ];
+  const candidateModels = GEMINI_FLASH_MODELS;
 
   for (const modelName of candidateModels) {
     try {

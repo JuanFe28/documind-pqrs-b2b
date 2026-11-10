@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
 import { getSecret } from '../utils/secrets.js';
+import { GEMINI_FLASH_MODELS } from '../config/geminiModels.js';
 import { registrarLogEjecucion, clasificarDepartamento, evaluarSla } from './automation.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -356,16 +357,10 @@ Reglas estrictas:
 5. NO agregues texto conversacional fuera del JSON.
 `;
 
-    // Invocación a Gemini Vision con soporte multimodal y fallback secuencial de modelos
-    const modelos = [
-      'gemini-2.5-flash',
-      'gemini-3.8-flash',
-      'gemini-3.5-flash',
-      'gemini-2.5-flash-lite',
-      'gemini-flash-latest',
-    ];
+    const modelos = GEMINI_FLASH_MODELS;
     let response = null;
-    let modeloExitoso = 'gemini-2.5-flash';
+    let modeloExitoso = modelos[0];
+    const erroresModelos = [];
 
     for (const mod of modelos) {
       try {
@@ -394,12 +389,14 @@ Reglas estrictas:
           break;
         }
       } catch (modErr) {
-        // Continuar al siguiente modelo disponible
+        erroresModelos.push(`${mod}: ${String(modErr.message || modErr).slice(0, 120)}`);
       }
     }
 
     if (!response || !response.text) {
-      throw new Error('Ningún modelo multimodal en la nube respondió satisfactoriamente');
+      throw new Error(
+        `Ningún modelo multimodal en la nube respondió satisfactoriamente (${erroresModelos.join(' | ') || 'sin detalle'})`
+      );
     }
 
     const rawOutput = response.text || '';

@@ -7,7 +7,7 @@ Sistema empresarial integral que combina la **Gestión Documental Inteligente (D
 - **Documento Técnico Oficial (Máx. 10 págs):** [`docs/DOCUMENTO_TECNICO_TERCER_CORTE.md`](docs/DOCUMENTO_TECNICO_TERCER_CORTE.md)
 - **Reporte Estadístico del Benchmark (20 Imágenes):** [`docs/REPORTE_EVALUACION_VISION_20.md`](docs/REPORTE_EVALUACION_VISION_20.md)
 - **Guía Académica Docente (Wilson Castaño Galviz):** [`docs/Guia_Tercer_Corte_Desarrollo_de_Aplicaciones_Empresariales.pdf`](docs/Guia_Tercer_Corte_Desarrollo_de_Aplicaciones_Empresariales.pdf)
-- **Diseño Semana 1:** [PDF de dos páginas](docs/SEMANA_1_DISENO.pdf) y [fuente editable](docs/SEMANA_1_DISENO.md)
+- **Diseño Semana 1 (documento histórico):** [PDF de dos páginas](docs/SEMANA_1_DISENO.pdf) y [fuente editable](docs/SEMANA_1_DISENO.md)
 
 ### Capacidades Desarrolladas en este Corte:
 1. **Componente 1 (Automatización Propia en Código - Ruta A):** Reemplazo del 100% de n8n por servicios nativos en Node.js (`backend/services/automation.service.js`) para los 5 flujos empresariales (F01 a F05), con tabla de auditoría `pqrs_logs_ejecuciones`, SLAs dinámicos (2h a 48h) e idempotencia estricta por `request_id` y `operation_id`.
@@ -16,26 +16,13 @@ Sistema empresarial integral que combina la **Gestión Documental Inteligente (D
 4. **Benchmark Evaluado:** Batería automatizada sobre 20 imágenes reales (`node tests/evaluar_vision_20_imagenes.js`) con 78.33% de precisión estricta global y 88.00% de confianza promedio.
 5. **Portal de Digitalización React:** Pantalla `/vision` con carga de fotos, prellenado interactivo y radicación nativa.
 
-## Tercer corte: semana 1
+## Tercer corte: semana 1 (documento histórico)
 
 Entrega de diseño: [PDF de dos páginas](docs/SEMANA_1_DISENO.pdf) y [fuente editable](docs/SEMANA_1_DISENO.md). Incluye inventario de los cinco flujos, elección de Ruta A, caso de visión y arquitectura propuesta. Diagnóstico del código y pendientes: [STATUS_AUDIT.md](STATUS_AUDIT.md).
 
-La app muestra esos cuatro requisitos en **Semana 1 · Diseño**, disponible desde el login y el menú. La ruta `/semana-1` permite comparar arquitectura actual/propuesta y descargar el PDF, sin requerir conexión a los servicios de negocio. Para verla localmente:
-
-```powershell
-cd frontend
-npm ci
-npm run dev
-# Abrir http://localhost:5173/semana-1
-```
-
-Esta vista presenta el entregable académico: identifica expresamente qué está en el código y qué está pendiente. No representa una migración ejecutada ni un módulo OCR operativo.
-
-Validación del 29/10/2026: [prueba de escritorio automatizada](docs/PRUEBA_ESCRITORIO_SEMANA_1.md), con 24 comprobaciones aprobadas sobre la vista de semana 1 y su acceso desde el login. Incluye captura y resultados; el informe distingue estos controles de las integraciones aún no verificadas. La compilación con `npm run build` incluye el PDF como recurso del paquete.
+La vista `/semana-1`, sus enlaces desde el login y el menú, y el PDF empaquetado en `frontend/public` fueron retirados del aplicativo para la presentación. El material académico permanece únicamente en `docs/`. El estado verificado de producción está en [`docs/ESTADO_PRODUCCION_ORACLE.md`](docs/ESTADO_PRODUCCION_ORACLE.md).
 
 Archivos vigentes: `index.html` es el portal autónomo PQRS de los cortes anteriores; `frontend/index.html` inicia la plataforma React; `workflow/n8n_workflow.json` es la exportación importable en n8n. Los dos archivos de `database/` son complementarios. Para regenerar el workflow: `node workflow/build_pqrs_workflow.js`.
-
-La entrega de semana 1 es documental. La migración, OCR y despliegue descritos son trabajo futuro; las afirmaciones históricas del resto del README deben leerse junto con la auditoría, que distingue implementación de funcionamiento comprobado. No se ha verificado una conexión real con PostgreSQL, n8n, SMTP o proveedores de IA en esta revisión.
 
 ---
 

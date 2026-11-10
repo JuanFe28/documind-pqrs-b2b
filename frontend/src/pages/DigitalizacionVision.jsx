@@ -145,10 +145,12 @@ export default function DigitalizacionVision() {
     }
   };
 
-  // Carga una muestra de demostración desde /public/muestras y la convierte en File
+  // Carga una muestra de demostración desde /public/muestras, la convierte en File
+  // y la analiza automáticamente: la demo completa se dispara con un solo clic.
   const handleCargarMuestra = async (muestra) => {
     setCargandoMuestra(muestra.id);
     setErrorMsg('');
+    let archivoMuestra = null;
 
     try {
       const respuesta = await fetch(muestra.url, { cache: 'no-store' });
@@ -157,7 +159,7 @@ export default function DigitalizacionVision() {
       }
 
       const blob = await respuesta.blob();
-      const archivoMuestra = new File([blob], muestra.nombre, {
+      archivoMuestra = new File([blob], muestra.nombre, {
         type: blob.type || 'image/jpeg',
         lastModified: Date.now(),
       });
@@ -175,9 +177,12 @@ export default function DigitalizacionVision() {
       setErrorMsg(
         'No se pudo cargar la muestra de demostración. Verifique que las imágenes estén disponibles en /muestras/.'
       );
-    } finally {
       setCargandoMuestra(null);
+      return;
     }
+
+    setCargandoMuestra(null);
+    await procesarArchivo(archivoMuestra);
   };
 
   const handleLimpiarFormato = () => {
@@ -187,9 +192,9 @@ export default function DigitalizacionVision() {
     }));
   };
 
-  // Procesamiento con IA Multimodal
-  const handleProcesarConVision = async () => {
-    if (!archivo) {
+  // Procesamiento con IA Multimodal (reutilizable para archivo propio o muestra demo)
+  const procesarArchivo = async (archivoParaProcesar) => {
+    if (!archivoParaProcesar) {
       setErrorMsg('Seleccione o tome una foto de un formulario físico primero.');
       return;
     }
@@ -199,7 +204,7 @@ export default function DigitalizacionVision() {
 
     try {
       const formData = new FormData();
-      formData.append('archivo', archivo);
+      formData.append('archivo', archivoParaProcesar);
 
       const res = await axios.post('/api/vision/procesar-formulario', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -226,6 +231,8 @@ export default function DigitalizacionVision() {
       setProcesando(false);
     }
   };
+
+  const handleProcesarConVision = () => procesarArchivo(archivo);
 
   // Disparo del proceso de negocio nativo en Express (Ruta A)
   const handleConfirmarYRadicar = async (e) => {
@@ -316,9 +323,10 @@ export default function DigitalizacionVision() {
               Formularios y Fotos de Prueba para Demostración
             </h2>
             <p className="text-xs text-slate-400 max-w-2xl">
-              Seleccione una muestra con un clic y luego pulse{' '}
-              <strong className="text-slate-200">Analizar con Visión por Computador</strong>. No necesita buscar
-              archivos en su equipo: las imágenes ya están disponibles en la aplicación.
+              Un solo clic carga la muestra y ejecuta automáticamente el{' '}
+              <strong className="text-slate-200">análisis con Visión por Computador</strong>. No necesita buscar
+              archivos en su equipo: las imágenes ya están disponibles en la aplicación. También puede sustituirla
+              por una foto o archivo propio en el panel inferior.
             </p>
           </div>
           <span className="inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-semibold text-indigo-300 uppercase tracking-wide flex-shrink-0">
