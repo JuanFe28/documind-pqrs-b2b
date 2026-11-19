@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { jest } from '@jest/globals';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs';
 import app from '../app.js';
@@ -461,6 +462,229 @@ describe('DocuMind — Pruebas de Remediación Prioritaria de Seguridad (Tarea 6
       expect(res.status).toBe(401);
       expect(res.body.ok).toBe(false);
       expect(res.body.mensaje).toMatch(/Token inválido o expirado/i);
+    });
+  });
+
+  // ============================================================================
+  // 6. RBAC DE CUENTAS OPERATIVAS Y AISLAMIENTO DEL REPOSITORIO OFICIAL
+  // ============================================================================
+  describe('F. RBAC de Repositorios y Semillas Operativas (SUPERVISOR / AGENTE)', () => {
+    const tokenSupervisor = jwt.sign(
+      {
+        id: 6,
+        nombre: 'Andrea Silva',
+        email: 'andrea.silva@techflow.co',
+        rol: 'supervisor',
+        departamento: 'Soporte Técnico',
+      },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    const tokenAgenteFacturacion = jwt.sign(
+      {
+        id: 7,
+        nombre: 'Carlos Restrepo',
+        email: 'carlos.restrepo@techflow.co',
+        rol: 'AGENTE',
+        departamento: 'Facturación y Cobranzas',
+      },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    test('SEC-RBAC-01: Login SUPERVISOR (Andrea Silva) devuelve rol y departamento en JWT', async () => {
+      const hashDistinto = await bcrypt.hash('clave-interna-no-evaluacion', 4);
+      dbQuerySpy.mockResolvedValueOnce([
+        {
+          id: 6,
+          nombre: 'Andrea Silva',
+          email: 'andrea.silva@techflow.co',
+          password_hash: hashDistinto,
+          rol: 'SUPERVISOR',
+          departamento: 'Soporte Técnico',
+        },
+      ]);
+
+      const res = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'andrea.silva@techflow.co', password: 'supervisorsoporte2026*' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.ok).toBe(true);
+      expect(res.body.usuario.rol).toBe('SUPERVISOR');
+      expect(res.body.usuario.departamento).toBe('Soporte Técnico');
+      const payload = jwt.verify(res.body.token, JWT_SECRET);
+      expect(payload.rol).toBe('SUPERVISOR');
+      expect(payload.departamento).toBe('Soporte Técnico');
+    });
+
+    test('SEC-RBAC-02: Login AGENTE (Carlos Restrepo) normaliza y conserva su departamento', async () => {
+      const hashDistinto = await bcrypt.hash('clave-interna-no-evaluacion', 4);
+      dbQuerySpy.mockResolvedValueOnce([
+        {
+          id: 7,
+          nombre: 'Carlos Restrepo',
+          email: 'carlos.restrepo@techflow.co',
+          password_hash: hashDistinto,
+          rol: 'AGENTE',
+          departamento: 'Facturación y Cobranzas',
+        },
+      ]);
+
+      const res = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'carlos.restrepo@techflow.co', password: 'agentefacturacion2026*' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.ok).toBe(true);
+      expect(res.body.usuario.rol).toBe('AGENTE');
+      expect(res.body.usuario.departamento).toBe('Facturación y Cobranzas');
+      const payload = jwt.verify(res.body.token, JWT_SECRET);
+      expect(payload.rol).toBe('AGENTE');
+      expect(payload.departamento).toBe('Facturación y Cobranzas');
+    });
+
+    test('SEC-RBAC-03: SUPERVISOR con rol en minúsculas ve Normativa PQRS y su departamento, sin acceso global', async () => {
+      let sqlEjecutado = '';
+      let paramsEjecutados = [];
+      dbQuerySpy.mockImplementationOnce(async (sql, params) => {
+        sqlEjecutado = String(sql);
+        paramsEjecutados = params;
+        return [
+          {
+            id: 3,
+            slug: 'normativa-pqrs',
+            nombre: 'Manuales, Normativa y Protocolos PQRS',
+            departamento: 'Normativa PQRS',
+            usuario_id: 1,
+          },
+          {
+            id: 11,
+            slug: 'soporte-interno',
+            nombre: 'Base de Conocimiento Soporte Técnico',
+            departamento: 'Soporte Técnico',
+            usuario_id: 6,
+          },
+        ];
+      });
+
+      const res = await request(app)
+        .get('/api/repositories')
+        .set('Authorization', `Bearer ${tokenSupervisor}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.ok).toBe(true);
+      expect(res.body.repositorios.some((r) => r.slug === 'normativa-pqrs')).toBe(true);
+      expect(res.body.repositorios.some((r) => r.departamento === 'Legal')).toBe(false);
+      expect(res.body.repositorios.some((r) => r.departamento === 'Financiero')).toBe(false);
+      expect(sqlEjecutado).toContain("r.slug = 'normativa-pqrs'");
+      expect(sqlEjecutado).toContain("r.departamento = 'Normativa PQRS'");
+      expect(sqlEjecutado).not.toMatch(/r\.departamento\s*=\s*'Legal'/i);
+      expect(sqlEjecutado).not.toMatch(/r\.departamento\s*=\s*'Financiero'/i);
+      expect(paramsEjecutados).toContain(6);
+      expect(paramsEjecutados).toContain('Soporte Técnico');
+    });
+
+    test('SEC-RBAC-04: AGENTE ve el repositorio oficial y su departamento sin abrir Legal/Financiero', async () => {
+      let sqlEjecutado = '';
+      let paramsEjecutados = [];
+      dbQuerySpy.mockImplementationOnce(async (sql, params) => {
+        sqlEjecutado = String(sql);
+        paramsEjecutados = params;
+        return [
+          {
+            id: 3,
+            slug: 'normativa-pqrs',
+            nombre: 'Manuales, Normativa y Protocolos PQRS',
+            departamento: 'Normativa PQRS',
+            usuario_id: 1,
+          },
+          {
+            id: 12,
+            slug: 'facturacion-interna',
+            nombre: 'Manual Interno de Facturación',
+            departamento: 'Facturación y Cobranzas',
+            usuario_id: 7,
+          },
+        ];
+      });
+
+      const res = await request(app)
+        .get('/api/repositories')
+        .set('Authorization', `Bearer ${tokenAgenteFacturacion}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.ok).toBe(true);
+      expect(res.body.repositorios.some((r) => r.slug === 'normativa-pqrs')).toBe(true);
+      expect(res.body.repositorios.some((r) => r.departamento === 'Legal')).toBe(false);
+      expect(res.body.repositorios.some((r) => r.departamento === 'Financiero')).toBe(false);
+      expect(sqlEjecutado).toContain("r.slug = 'normativa-pqrs'");
+      expect(paramsEjecutados).toContain(7);
+      expect(paramsEjecutados).toContain('Facturación y Cobranzas');
+    });
+
+    test('SEC-RBAC-05: LEGAL mantiene aislamiento estricto y no obtiene el repositorio oficial ni otros departamentos', async () => {
+      let sqlEjecutado = '';
+      let paramsEjecutados = [];
+      dbQuerySpy.mockImplementationOnce(async (sql, params) => {
+        sqlEjecutado = String(sql);
+        paramsEjecutados = params;
+        return [
+          {
+            id: 1,
+            slug: null,
+            nombre: 'Contratos Legales 2026',
+            departamento: 'Legal',
+            usuario_id: 1,
+          },
+        ];
+      });
+
+      const res = await request(app)
+        .get('/api/repositories')
+        .set('Authorization', `Bearer ${tokenLegal}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.ok).toBe(true);
+      expect(res.body.repositorios.every((r) => r.departamento === 'Legal')).toBe(true);
+      expect(sqlEjecutado).toContain('r.departamento = ?');
+      expect(sqlEjecutado).not.toContain("'Normativa PQRS'");
+      expect(sqlEjecutado).not.toContain("'normativa-pqrs'");
+      expect(paramsEjecutados[0]).toBe('Legal');
+      expect(paramsEjecutados).not.toContain('Financiero');
+      expect(paramsEjecutados).not.toContain('Recursos Humanos');
+    });
+
+    test('SEC-RBAC-06: RECLUTADOR mantiene aislamiento estricto en Recursos Humanos', async () => {
+      let sqlEjecutado = '';
+      let paramsEjecutados = [];
+      dbQuerySpy.mockImplementationOnce(async (sql, params) => {
+        sqlEjecutado = String(sql);
+        paramsEjecutados = params;
+        return [
+          {
+            id: 20,
+            slug: null,
+            nombre: 'Hojas de Vida y Procesos RH',
+            departamento: 'Recursos Humanos',
+            usuario_id: 5,
+          },
+        ];
+      });
+
+      const res = await request(app)
+        .get('/api/repositories')
+        .set('Authorization', `Bearer ${tokenReclutador}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.ok).toBe(true);
+      expect(res.body.repositorios.every((r) => r.departamento === 'Recursos Humanos')).toBe(true);
+      expect(sqlEjecutado).toContain('r.departamento = ?');
+      expect(sqlEjecutado).not.toContain("'Normativa PQRS'");
+      expect(paramsEjecutados[0]).toBe('Recursos Humanos');
+      expect(paramsEjecutados).not.toContain('Legal');
+      expect(paramsEjecutados).not.toContain('Financiero');
     });
   });
 });

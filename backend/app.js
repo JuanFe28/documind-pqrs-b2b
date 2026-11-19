@@ -21,6 +21,11 @@ import pqrsRoutes from './routes/pqrs.routes.js';
 import automationRoutes from './routes/automation.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
 import visionRoutes from './routes/vision.routes.js';
+import {
+  warmupGeminiRAG,
+  getActiveModel,
+  getActiveEmbeddingModel,
+} from './services/gemini.service.js';
 
 const app = express();
 
@@ -45,6 +50,14 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('X-XSS-Protection', '0');
+  next();
+});
+
+// ─── Anti-caché para respuestas de la API (incluye warmup y chat RAG) ────────
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   next();
 });
 
@@ -86,6 +99,28 @@ app.use('/api/vision', visionRoutes);
 // ─── Emulación Nativa de Webhooks n8n (Ruta A) ──────────────────────────────
 // Reemplaza el 100% de los flujos de n8n en el puerto de Express para compatibilidad total
 app.use('/webhook', webhookRoutes);
+
+// ─── Precalentamiento explícito del pipeline Gemini RAG ──────────────────────
+async function manejarWarmupGemini(req, res) {
+  const inicio = Date.now();
+  let resultado = {};
+  try {
+    resultado = await warmupGeminiRAG();
+  } catch (error) {
+    console.warn('[Gemini Warmup] No se pudo precalentar:', error.message);
+  }
+
+  return res.status(200).json({
+    ok: true,
+    warmed: true,
+    activeModel: resultado.activeModel ?? getActiveModel(),
+    embeddingModel: resultado.embeddingModel ?? getActiveEmbeddingModel(),
+    latencia_ms: Date.now() - inicio,
+  });
+}
+
+app.get('/api/documind/warmup', manejarWarmupGemini);
+app.post('/api/documind/warmup', manejarWarmupGemini);
 
 // Health check
 app.get('/api/health', (req, res) => {

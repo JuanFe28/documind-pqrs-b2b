@@ -1,6 +1,7 @@
 import app from './app.js';
 import db from './config/db.js';
 import { obtenerClaveSecretaJWT } from './middleware/auth.middleware.js';
+import { warmupGeminiRAG } from './services/gemini.service.js';
 
 // Verificación de seguridad en el arranque: falla de forma segura si falta JWT_SECRET
 try {
@@ -49,5 +50,23 @@ app.listen(PORT, async () => {
   console.log(`\n🚀 DocuMind Backend corriendo en http://localhost:${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
   console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}\n`);
+
+  // Precalentamiento asíncrono y no bloqueante del pipeline Gemini RAG.
+  // Descubre en paralelo el modelo operativo y calienta conexiones antes del
+  // primer mensaje real. Nunca se ejecuta durante las pruebas automatizadas.
+  if (process.env.NODE_ENV !== 'test') {
+    setImmediate(() => {
+      warmupGeminiRAG()
+        .then((resultado) => {
+          console.log(
+            `[Gemini Warmup] listo en ${resultado.latencia_ms}ms | modelo=${resultado.activeModel || 'respaldo'} | embedding=${resultado.embeddingModel || 'respaldo'}`
+          );
+        })
+        .catch((warmupErr) => {
+          console.warn('[Gemini Warmup] Advertencia:', warmupErr.message);
+        });
+    });
+  }
+
   await migrarTablasChatHistorial();
 });

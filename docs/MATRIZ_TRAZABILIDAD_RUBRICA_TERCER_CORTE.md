@@ -17,7 +17,7 @@
 | **Seguridad y protección de datos** | 10 | RBAC/JWT, auditoría, secretos en variables de entorno, `enmascararPII`, endpoint protegido con SHA-256, consentimiento Ley 1581 y verificación humana. Suite `security_remediation.test.js` (25 pruebas). | ✅ Cumple | **10/10** |
 | **Pruebas y plan B ante fallos** | 10 | 6 suites Jest (104 pruebas), benchmark de 20 imágenes reales con 100.00% de precisión, Plan B heurístico y `ejecutarConReintentos` con backoff exponencial. | ⚠️ Cumple parcialmente | **9/10** |
 | **Despliegue y documentación** | 10 | `backend/Dockerfile`, `frontend/Dockerfile`, `render.yaml`, `docker-compose.prod.example.yml`, `.env.production.example`, `docs/GUIA_DESPLIEGUE_NUBE_GRATUITA.md`, `docs/DOCUMENTO_TECNICO_TERCER_CORTE.md` y este documento. | ⚠️ Cumple parcialmente | **9/10** |
-| **Sustentación** | 5 | `docs/LIBRETO_SUSTENTACION_TERCER_CORTE.md`, `docs/GUION_VIDEO_DEMO_TERCER_CORTE.md`, `docs/PREGUNTAS_DEFENSA_DOCUMIND.md`. | ✅ Cumple | 5/5 |
+| **Sustentación** | 5 | `README.md` (Guía Ejecutiva de Operación y Sustentación) y módulo interactivo integrado **Recorrido Guiado** (5 pasos) en la interfaz web. | ✅ Cumple | 5/5 |
 | **TOTAL** | **100** | | | **98/100** |
 
 > **Nota de alcance:** el dictamen solicitado se concentra en los tres criterios transversales que suman **30 puntos**: Seguridad y protección de datos (10), Pruebas y plan B (10) y Despliegue y documentación (10). El puntaje de esos tres criterios se detalla en la sección 5.

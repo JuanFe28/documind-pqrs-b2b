@@ -150,6 +150,19 @@ Los hallazgos quedan registrados para la próxima iteración; esta limpieza no m
 | REQ-006 | UX/Front | Calibración de umbral (`confianza < 0.85`) e interfaz Human-in-the-Loop (`/vision`) | Front/Back | Alta | DONE |
 | REQ-007 | Benchmark | Dataset de 20 casos reales y reporte estadístico de precisión por campo | Tests/Doc | Alta | DONE |
 | REQ-008 | Transversal | Cumplimiento Ley 1581 (PII), RBAC, variables de entorno y 98 pruebas Jest | Transversal | Alta | DONE |
+| BUG-001 | Reparación | Encuesta CSAT resiliente (`tracking_token \|\| token`) en n8n, simulador, Express y portales | Full-Stack | Crítica | DONE |
+| BUG-002 | Reparación | Sincronización de semillas reales (`Andrea Silva`, `Carlos Restrepo`, `Valeria Gómez`), `email` y Logout directo | DB/Back/Front | Alta | DONE |
+| BUG-003 | Reparación | Vinculación opcional de `documento_id` → `documentos.ticket_id` en radicación (`radicar-pqrs`) | n8n/DB/Front | Alta | DONE |
+| BUG-004 | Reparación | Normalización canónica de prioridades (`Crítica`/`Alta`/`Media`/`Baja`) en Express y React | Back/Front | Media | DONE |
+| BUG-005 | Reparación | Concurrencia optimista (`version`), reapertura `fecha_resolucion` en Express y deep-linking `hashchange` | Back/Front | Baja | DONE |
+| UIUX-01 | Rediseño | Refinamiento `impeccable` + Apple HIG + Linear/Stripe (`0` emojis Unicode, cero cards anidadas, 5 KPIs unificados) | Front/HTML | Alta | DONE |
+| PURGE-01 | Limpieza | Eliminación de `PANEL_SUSTENTACION.html` y guiones de exposición en `docs/`; `README.md` ejecutivo consolidado | Docs/Repo | Alta | DONE |
+| PERF-01 | Rendimiento | Circuit Breaker `lastWorkingModel`, `AbortSignal.timeout(3000)`, warm-up `/api/documind/warmup` y Chat `< 1.5s` | Back/Front | Crítica | DONE |
+| TOUR-01 | Experiencia | Tema Claro `#F8FAFC` por defecto (toggle Claro/Oscuro), anti-caché y Recorrido Guiado Spotlight de 5 pasos | Front/HTML | Alta | DONE |
+| EVOL-S1 | Evolución S1 | 3.er Repositorio `'Normativa PQRS'` (`id=3`) + 4 manuales base + unificación RBAC (`ADMIN`/`SUPERVISOR`/`AGENTE`) | DB/Back | Alta | DONE |
+| EVOL-S2 | Evolución S2 | Circuit Breaker compartido en Visión IA + Copiloto Context-Fusion (`ticket_id` + adjunto + normativa `< 1.5s`) | Back/n8n | Alta | DONE |
+| EVOL-S3 | Evolución S3 | App Shell unificado (`AppHeader.jsx` + `Sidebar.jsx`), 3 Temas (`Daylight`/`Slate`/`Obsidian`) y Login Pro | Front/HTML | Alta | DONE |
+| EVOL-S4 | Evolución S4 | Copiloto PQRS conectado (`/chat?ticket_id=...`), Tour Spotlight v2 y certificación `133/133` Jest + `29/29` E2E | Full-Stack | Alta | DONE |
 
 Plantilla para copiar sin asumir nuevas tareas:
 

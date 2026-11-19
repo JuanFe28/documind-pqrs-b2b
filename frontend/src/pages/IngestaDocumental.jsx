@@ -13,8 +13,10 @@ import {
   RefreshCw,
   FileSearch,
   FolderOpen,
-  Plus,
   FolderPlus,
+  Receipt,
+  UserRound,
+  Bot,
 } from 'lucide-react';
 import { documentsAPI, repositoriesAPI } from '../services/api';
 
@@ -26,11 +28,21 @@ const BADGE_MAP = {
 };
 
 const CATEGORIA_ICON = {
-  Contrato: '📄',
-  Factura: '🧾',
-  'Hoja de Vida': '👤',
-  Otros: '📁',
+  Contrato: FileText,
+  Factura: Receipt,
+  'Hoja de Vida': UserRound,
+  Otros: FolderOpen,
 };
+
+function CategoriaEtiqueta({ categoria }) {
+  const Icon = CATEGORIA_ICON[categoria] || FolderOpen;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <Icon className="h-4 w-4 text-indigo-500" strokeWidth={1.75} />
+      {categoria}
+    </span>
+  );
+}
 
 function formatBytes(bytes) {
   if (!bytes) return '—';
@@ -176,7 +188,7 @@ export default function IngestaDocumental({ selectedRepo, onRepoSelect }) {
       }
       setUploadStatus({
         tipo: 'success',
-        mensaje: `✅ Repositorio '${nuevo?.nombre || formRepo.nombre}' creado y seleccionado exitosamente.`
+        mensaje: `Repositorio '${nuevo?.nombre || formRepo.nombre}' creado y seleccionado exitosamente.`
       });
     } catch (err) {
       setUploadStatus({
@@ -199,7 +211,7 @@ export default function IngestaDocumental({ selectedRepo, onRepoSelect }) {
     if (!files || files.length === 0) return;
 
     if (!selectedRepo) {
-      setUploadStatus({ tipo: 'error', mensaje: '⚠️ Selecciona o crea un repositorio antes de cargar archivos.' });
+      setUploadStatus({ tipo: 'error', mensaje: 'Selecciona o crea un repositorio antes de cargar archivos.' });
       return;
     }
 
@@ -222,7 +234,7 @@ export default function IngestaDocumental({ selectedRepo, onRepoSelect }) {
       setUploadProgress(0);
       setUploadStatus({ 
         tipo: 'info', 
-        mensaje: `🔄 Procesando [${i + 1}/${archivosArray.length}] "${archivo.name}" con IA...` 
+        mensaje: `Procesando [${i + 1}/${archivosArray.length}] "${archivo.name}" con IA...` 
       });
 
       // Simular progreso visual
@@ -251,7 +263,7 @@ export default function IngestaDocumental({ selectedRepo, onRepoSelect }) {
     
     setUploadStatus({
       tipo: fallidos === 0 ? 'success' : (exitosos === 0 ? 'error' : 'info'),
-      mensaje: `✅ Proceso completado. ${exitosos} archivos indexados. ` + (fallidos > 0 ? `❌ ${fallidos} fallidos.` : '')
+      mensaje: `Proceso completado. ${exitosos} archivos indexados. ` + (fallidos > 0 ? `${fallidos} fallidos.` : '')
     });
     
     await cargarDocumentos();
@@ -294,14 +306,15 @@ export default function IngestaDocumental({ selectedRepo, onRepoSelect }) {
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <span>📥</span> Ingesta y Carga Documental
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-800">
+            <UploadCloud className="h-5 w-5 text-indigo-600" strokeWidth={1.75} />
+            Ingesta y Carga Documental
           </h1>
           <p className="text-slate-500 text-sm mt-1">
             Cargue archivos PDF, DOCX y TXT para que la IA extraiga metadatos y clasifique automáticamente.
             {selectedRepo && (
               <span className="ml-2 text-indigo-600 font-semibold">
-                → Repositorio: {selectedRepo.nombre}
+                {selectedRepo.nombre} · Repositorio seleccionado
               </span>
             )}
           </p>
@@ -343,7 +356,7 @@ export default function IngestaDocumental({ selectedRepo, onRepoSelect }) {
                 ) : (
                   repositorios.map((r) => (
                     <option key={r.id} value={r.id}>
-                      📁 {r.nombre} ({r.departamento}) — {r.total_documentos || 0} docs
+                      {r.nombre} ({r.departamento}) — {r.total_documentos || 0} docs
                     </option>
                   ))
                 )}
@@ -360,7 +373,7 @@ export default function IngestaDocumental({ selectedRepo, onRepoSelect }) {
             className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow transition-all"
           >
             <FolderPlus className="w-4 h-4" />
-            <span>+ Nuevo Repositorio</span>
+            <span>Nuevo Repositorio</span>
           </button>
         </div>
       </div>
@@ -515,7 +528,7 @@ export default function IngestaDocumental({ selectedRepo, onRepoSelect }) {
                     <td className="p-4 text-slate-500">{formatBytes(doc.tamano_bytes ?? doc.tamaño_bytes)}</td>
                     <td className="p-4 font-semibold text-indigo-600">
                       {doc.categoria_detectada
-                        ? `${CATEGORIA_ICON[doc.categoria_detectada] || '📁'} ${doc.categoria_detectada}`
+                        ? <CategoriaEtiqueta categoria={doc.categoria_detectada} />
                         : <span className="text-slate-400 font-normal">Pendiente</span>
                       }
                     </td>
@@ -594,16 +607,18 @@ export default function IngestaDocumental({ selectedRepo, onRepoSelect }) {
             {/* Contenido Modal con Scroll */}
             <div className="p-6 space-y-5 overflow-y-auto flex-1">
               {/* Info básica */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5">
+              <div className="grid grid-cols-2 gap-6 border-b border-slate-100 pb-5">
+                <div>
                   <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-1">Categoría IA</p>
                   <p className="text-slate-800 font-bold text-base flex items-center gap-1.5">
-                    {CATEGORIA_ICON[docDetalle.categoria_detectada]} {docDetalle.categoria_detectada || '—'}
+                    {docDetalle.categoria_detectada
+                      ? <CategoriaEtiqueta categoria={docDetalle.categoria_detectada} />
+                      : '—'}
                   </p>
                 </div>
-                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5">
+                <div>
                   <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-1">Confianza de Extracción</p>
-                  <p className={`font-bold text-xl ${(docDetalle.score_confianza || 0) >= 80 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  <p className={`font-bold text-xl tabular-nums ${(docDetalle.score_confianza || 0) >= 80 ? 'text-emerald-600' : 'text-amber-600'}`}>
                     {docDetalle.score_confianza != null ? `${parseFloat(docDetalle.score_confianza).toFixed(1)}%` : '—'}
                   </p>
                 </div>
@@ -611,12 +626,13 @@ export default function IngestaDocumental({ selectedRepo, onRepoSelect }) {
 
               {/* Resumen IA Completo */}
               {docDetalle.resumen_ia && (
-                <div className="bg-gradient-to-br from-indigo-50/90 to-blue-50/60 border border-indigo-100 rounded-xl p-4 shadow-sm">
-                  <div className="flex items-center justify-between mb-2 pb-2 border-b border-indigo-100/60">
+                <div className="border-l-2 border-indigo-300 pl-4">
+                  <div className="flex items-center justify-between mb-2">
                     <p className="text-xs text-indigo-700 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                      <span>🤖</span> Resumen Inteligente de DocuMind
+                      <Bot className="h-3.5 w-3.5" strokeWidth={1.75} />
+                      Resumen Inteligente de DocuMind
                     </p>
-                    <span className="text-[11px] bg-indigo-100 text-indigo-800 font-medium px-2 py-0.5 rounded-full">
+                    <span className="text-[11px] text-indigo-600 font-medium">
                       Análisis IA Completo
                     </span>
                   </div>
@@ -644,16 +660,16 @@ export default function IngestaDocumental({ selectedRepo, onRepoSelect }) {
               )}
 
               {/* Ficha técnica */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-100 text-xs text-slate-600">
-                <div className="bg-slate-50 p-2.5 rounded-lg"><span className="text-slate-400 block font-medium">Formato:</span> <span className="font-semibold text-slate-700 uppercase">{docDetalle.tipo_formato}</span></div>
-                <div className="bg-slate-50 p-2.5 rounded-lg"><span className="text-slate-400 block font-medium">Tamaño:</span> <span className="font-semibold text-slate-700">{formatBytes(docDetalle.tamano_bytes ?? docDetalle.tamaño_bytes)}</span></div>
-                <div className="bg-slate-50 p-2.5 rounded-lg"><span className="text-slate-400 block font-medium">Estado:</span> <span className="font-semibold text-emerald-600">{docDetalle.estado_procesamiento}</span></div>
-                <div className="bg-slate-50 p-2.5 rounded-lg"><span className="text-slate-400 block font-medium">Cargado:</span> <span className="font-semibold text-slate-700">{formatFecha(docDetalle.creado_en)}</span></div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-slate-100 text-xs text-slate-600">
+                <div><span className="text-slate-400 block font-medium">Formato:</span> <span className="font-semibold text-slate-700 uppercase">{docDetalle.tipo_formato}</span></div>
+                <div><span className="text-slate-400 block font-medium">Tamaño:</span> <span className="font-semibold text-slate-700 tabular-nums">{formatBytes(docDetalle.tamano_bytes ?? docDetalle.tamaño_bytes)}</span></div>
+                <div><span className="text-slate-400 block font-medium">Estado:</span> <span className="font-semibold text-emerald-600">{docDetalle.estado_procesamiento}</span></div>
+                <div><span className="text-slate-400 block font-medium">Cargado:</span> <span className="font-semibold text-slate-700">{formatFecha(docDetalle.creado_en)}</span></div>
               </div>
 
               {/* Visor de Documento embebido con URL de objeto temporal autenticada (sin credenciales en URL) */}
               {docDetalle.url_descarga && docDetalle.tipo_formato === 'PDF' && (
-                <div className="mt-4 border border-slate-200 rounded-xl overflow-hidden h-[500px] flex items-center justify-center bg-slate-100">
+                <div className="mt-4 rounded-xl overflow-hidden h-[500px] flex items-center justify-center bg-slate-100">
                   {loadingPreview ? (
                     <div className="flex flex-col items-center gap-2 text-slate-500">
                       <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />

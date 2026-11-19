@@ -9,6 +9,34 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /**
+ * Normaliza la prioridad a su representación canónica, ignorando mayúsculas y tildes.
+ * @param {string} valor - Prioridad recibida (por ejemplo: CRITICA, crítica, BAJA)
+ * @returns {string|null} Prioridad canónica ('Baja', 'Media', 'Alta', 'Crítica') o el valor original
+ */
+export function normalizarPrioridad(valor) {
+  if (valor === undefined || valor === null) return null;
+
+  const limpio = String(valor)
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  switch (limpio) {
+    case 'baja':
+      return 'Baja';
+    case 'media':
+      return 'Media';
+    case 'alta':
+      return 'Alta';
+    case 'critica':
+      return 'Crítica';
+    default:
+      return String(valor).trim();
+  }
+}
+
+/**
  * Lista solicitudes PQRS con filtros avanzados y paginación
  */
 export async function listarPqrs(req, res) {
@@ -23,8 +51,14 @@ export async function listarPqrs(req, res) {
       params.push(estado);
     }
     if (prioridad) {
-      conditions.push('s.prioridad = ?');
-      params.push(prioridad);
+      const prioridadNormalizada = normalizarPrioridad(prioridad);
+      if (prioridadNormalizada === 'Crítica') {
+        // Compatibilidad con datos históricos en mayúsculas y con el valor canónico actual
+        conditions.push("(s.prioridad IN ('Crítica', 'CRITICA'))");
+      } else {
+        conditions.push('s.prioridad = ?');
+        params.push(prioridadNormalizada);
+      }
     }
     if (tipo) {
       conditions.push('s.tipo_solicitud = ?');
@@ -199,36 +233,79 @@ export async function obtenerPqrsDetalle(req, res) {
 }
 
 /**
- * Actualiza el estado de un ticket y registra la nota en el timeline
+ * Actualiza el estado de un ticket con concurrencia optimista y registra la trazabilidad
+ * del cambio (estado anterior, estado nuevo y nota/acción) en el timeline.
  */
 export async function actualizarEstadoPqrs(req, res) {
   try {
     const { ticketId } = req.params;
-    const { nuevo_estado, nota = 'Estado actualizado por agente', agente_nombre = 'Agente Soporte', es_nota_interna = false } = req.body;
+    const {
+      nuevo_estado,
+      nota = 'Estado actualizado por agente',
+      agente_nombre = 'Agente Soporte',
+      es_nota_interna = false,
+      agente_asignado_id = null,
+      version,
+    } = req.body || {};
 
     if (!nuevo_estado) {
       return res.status(400).json({ status: 'error', mensaje: 'El campo nuevo_estado es requerido' });
     }
 
-    const fechaResolucion = ['RESUELTO', 'CERRADO'].includes(nuevo_estado) ? new Date() : null;
-
-    await db.query(
-      `UPDATE pqrs_solicitudes 
-       SET estado = ?, fecha_resolucion = COALESCE(?, fecha_resolucion), updated_at = NOW() 
-       WHERE ticket_id = ?`,
-      [nuevo_estado, fechaResolucion, ticketId]
+    // 1. Consultar el estado y la versión actual del ticket antes de escribir
+    const ticketsActuales = await db.query(
+      'SELECT id, ticket_id, estado, version FROM pqrs_solicitudes WHERE ticket_id = ?',
+      [ticketId]
     );
 
+    if (!ticketsActuales || ticketsActuales.length === 0) {
+      return res.status(404).json({ ok: false, status: 'error', mensaje: 'Ticket no encontrado' });
+    }
+
+    const ticketActual = ticketsActuales[0];
+    const versionActual = Number(ticketActual.version ?? 1);
+
+    // 2. Validar concurrencia optimista cuando el cliente informa la versión
+    const versionInformada = version !== undefined && version !== null && version !== '';
+    if (versionInformada && Number(version) !== versionActual) {
+      return res.status(409).json({
+        ok: false,
+        status: 'error',
+        mensaje: 'Conflicto de concurrencia optimista (409): el ticket fue modificado por otro agente.',
+      });
+    }
+
+    const nuevaVersion = versionActual + 1;
+
+    // 3. Actualizar estado, agente, versión y fecha de resolución (reapertura limpia)
     await db.query(
-      `INSERT INTO pqrs_actividades (ticket_id, autor_nombre, autor_tipo, es_nota_interna, mensaje, estado_nuevo)
-       VALUES (?, ?, 'AGENTE', ?, ?, ?)`,
-      [ticketId, agente_nombre, es_nota_interna, nota, nuevo_estado]
+      `UPDATE pqrs_solicitudes
+       SET estado = ?,
+           agente_asignado_id = COALESCE(?, agente_asignado_id),
+           version = COALESCE(version, 1) + 1,
+           updated_at = NOW(),
+           fecha_resolucion = CASE WHEN ? IN ('RESUELTO', 'CERRADO') THEN COALESCE(fecha_resolucion, NOW()) ELSE NULL END
+       WHERE ticket_id = ?`,
+      [nuevo_estado, agente_asignado_id, nuevo_estado, ticketId]
+    );
+
+    // 4. Registrar la actividad con trazabilidad completa del cambio
+    await db.query(
+      `INSERT INTO pqrs_actividades (ticket_id, autor_nombre, autor_tipo, es_nota_interna, mensaje, estado_anterior, estado_nuevo)
+       VALUES (?, ?, 'AGENTE', ?, ?, ?, ?)`,
+      [ticketId, agente_nombre, es_nota_interna, nota, ticketActual.estado, nuevo_estado]
     );
 
     return res.json({
       status: 'success',
       mensaje: `Ticket ${ticketId} actualizado a ${nuevo_estado}`,
       nuevo_estado,
+      version: nuevaVersion,
+      data: {
+        ticket_id: ticketId,
+        estado: nuevo_estado,
+        version: nuevaVersion,
+      },
     });
   } catch (error) {
     console.error('[PQRS Controller] Error al actualizar estado:', error.message);
@@ -244,10 +321,18 @@ export async function obtenerKpisPqrs(req, res) {
     const [totales] = await db.query(`
       SELECT 
         COUNT(*) AS total_tickets,
+        COUNT(*) AS total,
+        COUNT(*) FILTER (WHERE estado = 'NUEVO') AS nuevos,
         COUNT(*) FILTER (WHERE estado IN ('NUEVO', 'ASIGNADO', 'EN_GESTION')) AS tickets_abiertos,
+        COUNT(*) FILTER (WHERE estado IN ('ASIGNADO', 'EN_GESTION')) AS en_gestion,
         COUNT(*) FILTER (WHERE estado IN ('RESUELTO', 'CERRADO')) AS tickets_resueltos,
-        COUNT(*) FILTER (WHERE prioridad = 'CRITICA' AND estado NOT IN ('RESUELTO', 'CERRADO')) AS criticos_pendientes,
-        COUNT(*) FILTER (WHERE sla_fecha_limite < NOW() AND estado NOT IN ('RESUELTO', 'CERRADO')) AS vencidos_sla
+        COUNT(*) FILTER (WHERE estado IN ('RESUELTO', 'CERRADO')) AS resueltos,
+        COUNT(*) FILTER (WHERE prioridad IN ('Crítica', 'CRITICA') AND estado NOT IN ('RESUELTO', 'CERRADO')) AS criticos_pendientes,
+        COUNT(*) FILTER (WHERE prioridad IN ('Crítica', 'CRITICA') AND estado NOT IN ('RESUELTO', 'CERRADO')) AS criticos_activos,
+        COUNT(*) FILTER (WHERE sla_fecha_limite < NOW() AND estado NOT IN ('RESUELTO', 'CERRADO')) AS vencidos_sla,
+        COUNT(*) FILTER (WHERE sla_fecha_limite < NOW() AND estado NOT IN ('RESUELTO', 'CERRADO')) AS vencidos,
+        ROUND(100.0 * COUNT(*) FILTER (WHERE estado IN ('RESUELTO', 'CERRADO')) / NULLIF(COUNT(*), 0), 2) AS cumplimiento_pct,
+        ROUND(AVG(satisfaccion_score)::numeric, 2) AS satisfaccion_promedio
       FROM pqrs_solicitudes
     `);
 

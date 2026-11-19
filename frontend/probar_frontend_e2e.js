@@ -10,10 +10,10 @@ if (!fs.existsSync(EVIDENCIAS_DIR)) {
 }
 
 async function testFrontend() {
-  console.log('🚀 Iniciando pruebas E2E visuales del Frontend con Microsoft Edge...');
-  
+  console.log('[Inicio] Iniciando pruebas E2E visuales del Frontend con Microsoft Edge...');
+
   const edgePath = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-  
+
   const browser = await puppeteer.launch({
     executablePath: edgePath,
     headless: true,
@@ -30,7 +30,7 @@ async function testFrontend() {
     const evidPath = path.join(EVIDENCIAS_DIR, `${name}.png`);
     await page.screenshot({ path: artPath });
     fs.copyFileSync(artPath, evidPath);
-    console.log(`📸 Captura tomada: ${title} -> ${name}.png`);
+    console.log(`[Captura] Captura tomada: ${title} -> ${name}.png`);
     resultados.push({ name, title, artPath, evidPath });
   };
 
@@ -44,13 +44,13 @@ async function testFrontend() {
     console.log('2. Ingresando credenciales de prueba...');
     await page.type('input[type="email"], input[id="email"]', 'admin@documind.com');
     await page.type('input[type="password"], input[id="password"]', 'password_seguro_uts');
-    
+
     // Clic en Iniciar Sesión
     const btnLogin = await page.$('button[type="submit"]');
     if (btnLogin) {
       await btnLogin.click();
     }
-    
+
     // Esperar a que entre al dashboard o pqrs
     await new Promise(r => setTimeout(r, 2000));
     await capture('img_02_pqrs', 'Bandeja Principal de PQRS (Post-Login)');
@@ -79,13 +79,12 @@ async function testFrontend() {
     await new Promise(r => setTimeout(r, 1500));
     await capture('img_06_dashboard', 'Dashboard de Auditoría, Logs y KPIs de TI');
 
-    console.log('✅ Todas las pruebas de Frontend fueron completadas con éxito.');
+    console.log('[OK] Todas las pruebas de Frontend fueron completadas con éxito.');
   } catch (err) {
-    console.error('❌ Error durante la prueba E2E:', err);
+    console.error('[Error] Error durante la prueba E2E:', err);
   } finally {
     await browser.close();
   }
 }
 
 testFrontend();
-

@@ -19,10 +19,10 @@ const SEVERIDAD_CLASES = {
 };
 
 const SEVERIDAD_ROW_BG = {
-  CRITICAL: 'bg-red-50 border-red-100',
-  ERROR: 'bg-orange-50 border-orange-100',
-  WARNING: 'bg-amber-50 border-amber-100',
-  INFO: 'bg-blue-50 border-blue-100',
+  CRITICAL: 'bg-red-50/70',
+  ERROR: 'bg-orange-50/70',
+  WARNING: 'bg-amber-50/70',
+  INFO: 'bg-blue-50/70',
 };
 
 function formatHora(dateStr) {
@@ -99,8 +99,9 @@ export default function DashboardTI() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <span>📊</span> Dashboard Operativo y Monitoreo de IA
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-800">
+            <Activity className="h-5 w-5 text-indigo-600" strokeWidth={1.75} />
+            Dashboard Operativo y Monitoreo de IA
           </h1>
           <p className="text-slate-500 text-sm mt-1">
             Visualización de métricas en tiempo real, volumetrías de archivos (MySQL) y bitácora de auditoría de IA.
@@ -249,7 +250,7 @@ export default function DashboardTI() {
               </div>
 
               {/* Lista de logs */}
-              <div className="space-y-2 max-h-[32vh] overflow-y-auto flex-1">
+              <div className="max-h-[32vh] flex-1 overflow-y-auto">
                 {logsFiltrados.length === 0 ? (
                   <div className="text-center py-8 text-slate-300">
                     <Activity className="w-8 h-8 mx-auto mb-2" />
@@ -259,7 +260,7 @@ export default function DashboardTI() {
                   logsFiltrados.map((log) => (
                     <div
                       key={log.id}
-                      className={`p-3 border rounded-xl flex justify-between items-start gap-3 text-xs animate-fade-in ${SEVERIDAD_ROW_BG[log.severidad] || 'bg-slate-50 border-slate-100'}`}
+                      className={`flex items-start justify-between gap-3 border-b border-slate-100/80 px-2 py-3 text-xs last:border-0 animate-fade-in ${SEVERIDAD_ROW_BG[log.severidad] || 'bg-slate-50/70'}`}
                     >
                       <div className="flex items-start gap-2.5 flex-1 min-w-0">
                         <span className={`${SEVERIDAD_CLASES[log.severidad] || 'log-info'} flex-shrink-0 mt-0.5`}>

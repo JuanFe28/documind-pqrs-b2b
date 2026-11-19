@@ -10,21 +10,388 @@ const __dirname = dirname(__filename);
 dotenv.config({ path: join(__dirname, '../.env') });
 dotenv.config({ path: join(__dirname, '../config/.env') });
 
-const geminiApiKey = getSecret('GEMINI_API_KEY', {
-  defaultValue: process.env.GEMINI_API_KEY || null,
-  disallowDefaultInProduction: false,
-});
-const ai = new GoogleGenAI({ apiKey: geminiApiKey || '' });
+// ─── Estado compartido en memoria (Circuit Breaker + Memoización) ────────────
+const MODELOS_EMBEDDING = ['gemini-embedding-001', 'text-embedding-004', 'embedding-001'];
+const MODEL_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutos de circuito abierto
+const TIMEOUT_REMOTO_MS = 3000; // <= 3000ms por intento remoto
+const PRESUPUESTO_EMBEDDING_FRIO_MS = 900;
+const PRESUPUESTO_GENERACION_FRIO_MS = 1400;
+const PRESUPUESTO_MULTIMODAL_MS = 3500; // presupuesto total acotado para visión
+const PRESUPUESTO_WARMUP_MS = 1200;
+const MIN_API_KEY_LENGTH = 10;
+
+const estadoGemini = {
+  lastWorkingModel: null,
+  lastWorkingEmbeddingModel: null,
+  modelCooldowns: new Map(),
+  embeddingCooldowns: new Map(),
+};
+
+let aiClient = null;
+let aiClientKey = null;
+let warmupEnCurso = null;
+
+function resolverApiKey() {
+  try {
+    const apiKey = getSecret('GEMINI_API_KEY', {
+      defaultValue: process.env.GEMINI_API_KEY || null,
+      disallowDefaultInProduction: false,
+    });
+    if (typeof apiKey !== 'string') return null;
+    const limpia = apiKey.trim();
+    return limpia.length >= MIN_API_KEY_LENGTH ? limpia : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Indica si existe una GEMINI_API_KEY utilizable. Si no, todas las rutas RAG
+ * deben hacer short-circuit en 0ms al respaldo heurístico sin tocar la red.
+ */
+export function isGeminiConfigured() {
+  return Boolean(resolverApiKey());
+}
+
+function getAiClient() {
+  const apiKey = resolverApiKey();
+  if (!apiKey) return null;
+  if (!aiClient || aiClientKey !== apiKey) {
+    aiClient = new GoogleGenAI({ apiKey });
+    aiClientKey = apiKey;
+  }
+  return aiClient;
+}
+
+function estaEnCooldown(mapa, modelo, ahora = Date.now()) {
+  const hasta = mapa.get(modelo);
+  if (!hasta) return false;
+  if (hasta <= ahora) {
+    mapa.delete(modelo);
+    return false;
+  }
+  return true;
+}
+
+export function isModelInCooldown(modelo, ahora = Date.now()) {
+  return estaEnCooldown(estadoGemini.modelCooldowns, modelo, ahora);
+}
+
+export function isEmbeddingModelInCooldown(modelo, ahora = Date.now()) {
+  return estaEnCooldown(estadoGemini.embeddingCooldowns, modelo, ahora);
+}
+
+export function getLastWorkingModel() {
+  return estadoGemini.lastWorkingModel;
+}
+
+export function getLastWorkingEmbeddingModel() {
+  return estadoGemini.lastWorkingEmbeddingModel;
+}
+
+export function getActiveModel(ahora = Date.now()) {
+  const modelo = estadoGemini.lastWorkingModel;
+  if (!modelo) return null;
+  return estaEnCooldown(estadoGemini.modelCooldowns, modelo, ahora) ? null : modelo;
+}
+
+export function getActiveEmbeddingModel(ahora = Date.now()) {
+  const modelo = estadoGemini.lastWorkingEmbeddingModel;
+  if (!modelo) return null;
+  return estaEnCooldown(estadoGemini.embeddingCooldowns, modelo, ahora) ? null : modelo;
+}
+
+/**
+ * Registra un modelo de generación como operativo y lo promueve a modelo
+ * caliente. Compartido por el motor RAG conversacional y por visión multimodal.
+ */
+export function registrarModeloExitoso(modelo) {
+  if (!modelo) return;
+  estadoGemini.lastWorkingModel = modelo;
+  estadoGemini.modelCooldowns.delete(modelo);
+}
+
+function marcarEmbeddingExitoso(modelo) {
+  if (!modelo) return;
+  estadoGemini.lastWorkingEmbeddingModel = modelo;
+  estadoGemini.embeddingCooldowns.delete(modelo);
+}
+
+/**
+ * Abre el circuito para un modelo de generación durante MODEL_COOLDOWN_MS.
+ * Expuesto para que visión multimodal comparta exactamente el mismo estado
+ * de cooldown que el motor RAG.
+ */
+export function marcarModeloEnCooldown(modelo) {
+  if (!modelo) return;
+  estadoGemini.modelCooldowns.set(modelo, Date.now() + MODEL_COOLDOWN_MS);
+  if (estadoGemini.lastWorkingModel === modelo) estadoGemini.lastWorkingModel = null;
+}
+
+/**
+ * Devuelve la lista ordenada de modelos de generación candidatos:
+ * primero el modelo caliente (si no está en cooldown) y luego el resto de
+ * modelos Flash que no estén en cooldown. Misma fuente de verdad para RAG y visión.
+ */
+export function obtenerModelosCandidatosGeneracion(ahora = Date.now()) {
+  const candidatos = [];
+  const modeloCaliente = estadoGemini.lastWorkingModel;
+  if (modeloCaliente && !estaEnCooldown(estadoGemini.modelCooldowns, modeloCaliente, ahora)) {
+    candidatos.push(modeloCaliente);
+  }
+  for (const modelo of GEMINI_FLASH_MODELS) {
+    if (candidatos.includes(modelo)) continue;
+    if (!estaEnCooldown(estadoGemini.modelCooldowns, modelo, ahora)) candidatos.push(modelo);
+  }
+  return candidatos;
+}
+
+function marcarEmbeddingEnCooldown(modelo) {
+  if (!modelo) return;
+  estadoGemini.embeddingCooldowns.set(modelo, Date.now() + MODEL_COOLDOWN_MS);
+  if (estadoGemini.lastWorkingEmbeddingModel === modelo) {
+    estadoGemini.lastWorkingEmbeddingModel = null;
+  }
+}
+
+/**
+ * Marca en cooldown todos los modelos de generación candidatos. Se usa cuando
+ * una carrera paralela agota el presupuesto sin obtener respuesta remota.
+ */
+export function marcarModelosGeneracionEnCooldown(modelos = GEMINI_FLASH_MODELS) {
+  for (const modelo of modelos) marcarModeloEnCooldown(modelo);
+}
+
+/**
+ * Crea una señal de aborto con límite duro de 3000ms (AbortSignal.timeout).
+ * Compatible con runtimes sin AbortSignal.timeout mediante AbortController.
+ */
+export function crearAbortSignalRemoto() {
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+    return AbortSignal.timeout(3000);
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3000);
+  if (typeof timer.unref === 'function') timer.unref();
+  return controller.signal;
+}
 
 /**
  * Envoltorio con timeout estricto para evitar bloqueos por latencia de red.
  */
-function conTimeout(promesa, ms = 5000) {
+function conPresupuesto(promesa, ms, etiqueta = 'operación remota') {
   let timer;
   const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Tiempo de espera agotado (${ms}ms)`)), ms);
+    timer = setTimeout(
+      () => reject(new Error(`Tiempo de espera agotado (${ms}ms) en ${etiqueta}`)),
+      ms
+    );
   });
   return Promise.race([promesa, timeout]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Alias público del envoltorio de presupuesto, reutilizado por los servicios
+ * de visión y de chat para acotar estrictamente la latencia remota.
+ */
+export function conAbortTimeout(promesa, ms, etiqueta = 'operación remota') {
+  return conPresupuesto(promesa, ms, etiqueta);
+}
+
+function esErrorDeCooldown(error) {
+  if (!error) return false;
+  const status = Number(error.status ?? error.statusCode ?? error.code);
+  if ([400, 401, 403, 404, 429, 500, 502, 503, 504].includes(status)) return true;
+  const mensaje = `${error.message || ''} ${error.name || ''}`;
+  return /timeout|tiempo de espera|abort|network|fetch failed|ECONN|ENOTFOUND|EAI_AGAIN|no disponible|unavailable|overloaded|quota|rate limit|resource[_ ]exhausted|\b(?:400|404|429|500|502|503|504)\b/i.test(
+    mensaje
+  );
+}
+
+async function invocarGeneracionRemota(modelo, opciones = {}) {
+  const ai = getAiClient();
+  if (!ai) throw new Error('GEMINI_API_KEY no configurada');
+
+  const abortSignal = crearAbortSignalRemoto();
+  const config = {
+    temperature: opciones.temperature ?? 0.7,
+    abortSignal,
+  };
+  if (opciones.systemPrompt) config.systemInstruction = opciones.systemPrompt;
+  if (opciones.responseMimeType) config.responseMimeType = opciones.responseMimeType;
+  if (opciones.responseSchema) config.responseSchema = opciones.responseSchema;
+
+  const response = await conPresupuesto(
+    ai.models.generateContent({
+      model: modelo,
+      contents: opciones.contents,
+      config,
+    }),
+    opciones.timeoutMs ?? TIMEOUT_REMOTO_MS,
+    `generación ${modelo}`
+  );
+
+  const texto = response && typeof response.text === 'string' ? response.text.trim() : '';
+  if (!texto) throw new Error('Respuesta vacía del modelo');
+  return texto;
+}
+
+/**
+ * Genera contenido conversacional con un solo salto si existe un modelo
+ * memoizado en caliente. En frío ejecuta una carrera paralela (Promise.any)
+ * con presupuesto máximo de 1400ms y abre el circuito ante fallos de red.
+ */
+export async function generarContenidoChatGemini({
+  contents,
+  systemPrompt,
+  presupuestoMaximoMs = PRESUPUESTO_GENERACION_FRIO_MS,
+}) {
+  const inicio = Date.now();
+  if (!isGeminiConfigured()) {
+    return { texto: null, modelo: null, latencia_ms: 0 };
+  }
+
+  const presupuesto = Math.max(
+    150,
+    Math.min(TIMEOUT_REMOTO_MS, Number(presupuestoMaximoMs) || PRESUPUESTO_GENERACION_FRIO_MS)
+  );
+  const presupuestoFrio = Math.max(150, Math.min(PRESUPUESTO_GENERACION_FRIO_MS, presupuesto));
+
+  const modeloCaliente = getActiveModel();
+  if (modeloCaliente) {
+    try {
+      const texto = await invocarGeneracionRemota(modeloCaliente, {
+        contents,
+        systemPrompt,
+        temperature: 0.7,
+        timeoutMs: presupuesto,
+      });
+      registrarModeloExitoso(modeloCaliente);
+      return { texto, modelo: modeloCaliente, latencia_ms: Date.now() - inicio };
+    } catch (error) {
+      marcarModeloEnCooldown(modeloCaliente);
+      console.warn(
+        `[Gemini Chat] Modelo en caliente ${modeloCaliente} falló (${String(error.message).slice(0, 60)}). Se usa respaldo.`
+      );
+      return { texto: null, modelo: null, latencia_ms: Date.now() - inicio };
+    }
+  }
+
+  const ahora = Date.now();
+  const candidatos = GEMINI_FLASH_MODELS.filter(
+    (modelo) => !estaEnCooldown(estadoGemini.modelCooldowns, modelo, ahora)
+  );
+  if (candidatos.length === 0) {
+    return { texto: null, modelo: null, latencia_ms: Date.now() - inicio };
+  }
+
+  try {
+    const resultado = await conPresupuesto(
+      Promise.any(
+        candidatos.map(async (modelo) => {
+          const texto = await invocarGeneracionRemota(modelo, {
+            contents,
+            systemPrompt,
+            temperature: 0.7,
+            timeoutMs: TIMEOUT_REMOTO_MS,
+          });
+          return { texto, modelo };
+        })
+      ),
+      presupuestoFrio,
+      'carrera de modelos de chat'
+    );
+    registrarModeloExitoso(resultado.modelo);
+    return { ...resultado, latencia_ms: Date.now() - inicio };
+  } catch (error) {
+    for (const modelo of candidatos) marcarModeloEnCooldown(modelo);
+    console.warn(
+      `[Gemini Chat] Ningún modelo respondió dentro de ${presupuestoFrio}ms. Circuito abierto; respaldo inmediato.`
+    );
+    return { texto: null, modelo: null, latencia_ms: Date.now() - inicio };
+  }
+}
+
+/**
+ * Ejecución multimodal compartida con el mismo Circuit Breaker que el motor RAG.
+ * - Reutiliza lastWorkingModel y modelCooldowns del motor conversacional.
+ * - Prioriza el modelo caliente si no está en cooldown.
+ * - En frío lanza una carrera paralela (Promise.any) acotada a 3500ms.
+ * - Cada intento individual queda limitado por AbortSignal.timeout(3000) y por
+ *   el presupuesto del intento, evitando bloqueos largos ante HTTP 429 o caídas.
+ * Retorna { texto, modelo, latencia_ms } o texto null si el circuito está abierto.
+ */
+export async function generarContenidoMultimodalGemini({
+  contents,
+  systemPrompt,
+  presupuestoMaximoMs = PRESUPUESTO_MULTIMODAL_MS,
+  timeoutPorIntentoMs = TIMEOUT_REMOTO_MS,
+  temperature = 0.2,
+}) {
+  const inicio = Date.now();
+  if (!isGeminiConfigured()) {
+    return { texto: null, modelo: null, latencia_ms: 0 };
+  }
+
+  const presupuestoTotal = Math.max(
+    150,
+    Math.min(PRESUPUESTO_MULTIMODAL_MS, Number(presupuestoMaximoMs) || PRESUPUESTO_MULTIMODAL_MS)
+  );
+  const presupuestoIntento = Math.max(
+    150,
+    Math.min(TIMEOUT_REMOTO_MS, Number(timeoutPorIntentoMs) || TIMEOUT_REMOTO_MS)
+  );
+
+  const modeloCaliente = getActiveModel();
+  if (modeloCaliente) {
+    try {
+      const texto = await invocarGeneracionRemota(modeloCaliente, {
+        contents,
+        systemPrompt,
+        temperature,
+        timeoutMs: Math.min(presupuestoTotal, presupuestoIntento),
+      });
+      registrarModeloExitoso(modeloCaliente);
+      return { texto, modelo: modeloCaliente, latencia_ms: Date.now() - inicio };
+    } catch (error) {
+      marcarModeloEnCooldown(modeloCaliente);
+      console.warn(
+        `[Gemini Visión] Modelo en caliente ${modeloCaliente} falló (${String(error.message).slice(0, 60)}). Se usa Plan B.`
+      );
+      return { texto: null, modelo: null, latencia_ms: Date.now() - inicio };
+    }
+  }
+
+  const candidatos = obtenerModelosCandidatosGeneracion();
+  if (candidatos.length === 0) {
+    return { texto: null, modelo: null, latencia_ms: Date.now() - inicio };
+  }
+
+  try {
+    const resultado = await conPresupuesto(
+      Promise.any(
+        candidatos.map(async (modelo) => {
+          const texto = await invocarGeneracionRemota(modelo, {
+            contents,
+            systemPrompt,
+            temperature,
+            timeoutMs: presupuestoIntento,
+          });
+          return { texto, modelo };
+        })
+      ),
+      presupuestoTotal,
+      'carrera multimodal de modelos'
+    );
+    registrarModeloExitoso(resultado.modelo);
+    return { ...resultado, latencia_ms: Date.now() - inicio };
+  } catch (error) {
+    for (const modelo of candidatos) marcarModeloEnCooldown(modelo);
+    console.warn(
+      `[Gemini Visión] Ningún modelo multimodal respondió dentro de ${presupuestoTotal}ms. Circuito abierto; Plan B inmediato.`
+    );
+    return { texto: null, modelo: null, latencia_ms: Date.now() - inicio };
+  }
 }
 
 /**
@@ -326,28 +693,37 @@ export async function analizarDocumentoConGemini(textoPlano) {
     required: ['categoria_detectada', 'score_confianza', 'resumen_ia', 'metadatos'],
   };
 
-  const candidateModels = GEMINI_FLASH_MODELS;
+  if (!isGeminiConfigured()) {
+    return extraerMetadatosHeuristicos(textoPlano);
+  }
+
+  const ahora = Date.now();
+  const modeloCaliente = getActiveModel(ahora);
+  const candidateModels = [];
+  if (modeloCaliente) candidateModels.push(modeloCaliente);
+  for (const modelo of GEMINI_FLASH_MODELS) {
+    if (!candidateModels.includes(modelo) && !estaEnCooldown(estadoGemini.modelCooldowns, modelo, ahora)) {
+      candidateModels.push(modelo);
+    }
+  }
 
   for (const modelName of candidateModels) {
     try {
-      const response = await conTimeout(
-        ai.models.generateContent({
-          model: modelName,
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema: responseSchema,
-            temperature: 0.2,
-          },
-        }),
-        8000
-      );
+      const textoRespuesta = await invocarGeneracionRemota(modelName, {
+        contents: prompt,
+        responseMimeType: 'application/json',
+        responseSchema: responseSchema,
+        temperature: 0.2,
+        timeoutMs: TIMEOUT_REMOTO_MS,
+      });
 
-      const parsed = JSON.parse(response.text);
+      const parsed = JSON.parse(textoRespuesta);
       parsed.score_confianza = calcularScoreConfianzaDinamico(parsed.categoria_detectada, textoPlano, parsed.metadatos);
+      registrarModeloExitoso(modelName);
       return parsed;
     } catch (error) {
-      console.warn(`[Gemini Service] Modelo ${modelName} falló en análisis (${error.message.slice(0, 50)}).`);
+      if (esErrorDeCooldown(error)) marcarModeloEnCooldown(modelName);
+      console.warn(`[Gemini Service] Modelo ${modelName} falló en análisis (${String(error.message).slice(0, 50)}).`);
     }
   }
 
@@ -369,34 +745,198 @@ function generarVectorHash768(texto) {
   return vector.map((v) => v / norm);
 }
 
-/**
- * Vectoriza un chunk de texto con failover entre modelos y timeout controlado.
- */
-export async function generarEmbeddingGoogle(textoChunk) {
-  const candidateEmbeddingModels = ['gemini-embedding-001', 'text-embedding-004', 'embedding-001'];
+function marcarVectorDeRespaldo(vector) {
+  try {
+    Object.defineProperty(vector, '__esVectorRespaldo', {
+      value: true,
+      enumerable: false,
+      configurable: true,
+    });
+  } catch {
+    // Los arrays estándar permiten propiedades; si fallara, se retorna igual.
+  }
+  return vector;
+}
 
-  for (const modelName of candidateEmbeddingModels) {
+/**
+ * Permite a los consumidores saber si el vector provino del respaldo
+ * determinístico (sin conectividad remota) y así evitar latencia adicional.
+ */
+export function esVectorDeRespaldo(vector) {
+  return Boolean(vector && vector.__esVectorRespaldo);
+}
+
+async function invocarEmbeddingRemoto(modelo, textoChunk, timeoutMs = TIMEOUT_REMOTO_MS) {
+  const ai = getAiClient();
+  if (!ai) throw new Error('GEMINI_API_KEY no configurada');
+
+  const abortSignal = crearAbortSignalRemoto();
+  const response = await conPresupuesto(
+    ai.models.embedContent({
+      model: modelo,
+      contents: textoChunk,
+      config: {
+        outputDimensionality: 768,
+        abortSignal,
+      },
+    }),
+    timeoutMs,
+    `embedding ${modelo}`
+  );
+
+  const valores = response?.embeddings?.[0]?.values;
+  if (!Array.isArray(valores) || valores.length === 0) {
+    throw new Error('Embedding remoto vacío');
+  }
+  return valores;
+}
+
+/**
+ * Vectoriza un chunk de texto con un solo salto si el modelo está en caliente
+ * o con una carrera paralela de presupuesto corto cuando está en frío.
+ */
+export async function generarEmbeddingGoogle(
+  textoChunk,
+  { presupuestoMaximoMs = PRESUPUESTO_EMBEDDING_FRIO_MS } = {}
+) {
+  if (!isGeminiConfigured()) {
+    return marcarVectorDeRespaldo(generarVectorHash768(textoChunk));
+  }
+
+  const presupuesto = Math.max(
+    150,
+    Math.min(TIMEOUT_REMOTO_MS, Number(presupuestoMaximoMs) || PRESUPUESTO_EMBEDDING_FRIO_MS)
+  );
+  const presupuestoFrio = Math.max(150, Math.min(PRESUPUESTO_EMBEDDING_FRIO_MS, presupuesto));
+
+  const ahora = Date.now();
+  const modeloCaliente = getActiveEmbeddingModel(ahora);
+  if (modeloCaliente) {
     try {
-      const response = await conTimeout(
-        ai.models.embedContent({
-          model: modelName,
-          contents: textoChunk,
-          config: {
-            outputDimensionality: 768,
-          },
-        }),
-        3500
-      );
-      if (response && response.embeddings && response.embeddings[0]?.values) {
-        return response.embeddings[0].values;
-      }
+      const vector = await invocarEmbeddingRemoto(modeloCaliente, textoChunk, presupuesto);
+      marcarEmbeddingExitoso(modeloCaliente);
+      return vector;
     } catch (error) {
-      console.warn(`[Gemini Embedding] Modelo ${modelName} no disponible. Probando alternativa...`);
+      marcarEmbeddingEnCooldown(modeloCaliente);
+      console.warn(
+        `[Gemini Embedding] Modelo en caliente ${modeloCaliente} falló; se usa respaldo determinístico.`
+      );
+      return marcarVectorDeRespaldo(generarVectorHash768(textoChunk));
     }
   }
 
-  // Fallback determinístico offline de 768 dimensiones
-  return generarVectorHash768(textoChunk);
+  const candidatos = MODELOS_EMBEDDING.filter(
+    (modelo) => !estaEnCooldown(estadoGemini.embeddingCooldowns, modelo, ahora)
+  );
+  if (candidatos.length === 0) {
+    return marcarVectorDeRespaldo(generarVectorHash768(textoChunk));
+  }
+
+  try {
+    const resultado = await conPresupuesto(
+      Promise.any(
+        candidatos.map(async (modelo) => ({
+          modelo,
+          vector: await invocarEmbeddingRemoto(modelo, textoChunk),
+        }))
+      ),
+      presupuestoFrio,
+      'carrera de embeddings'
+    );
+    marcarEmbeddingExitoso(resultado.modelo);
+    return resultado.vector;
+  } catch (error) {
+    for (const modelo of candidatos) marcarEmbeddingEnCooldown(modelo);
+    console.warn(
+      `[Gemini Embedding] Ningún modelo respondió dentro de ${presupuestoFrio}ms. Circuito abierto; respaldo determinístico.`
+    );
+    return marcarVectorDeRespaldo(generarVectorHash768(textoChunk));
+  }
+}
+
+async function ejecutarWarmupGemini() {
+  const inicio = Date.now();
+  if (!isGeminiConfigured()) {
+    return {
+      activeModel: null,
+      embeddingModel: null,
+      latencia_ms: Date.now() - inicio,
+      disponible: false,
+    };
+  }
+
+  const ahora = Date.now();
+  const modelos = GEMINI_FLASH_MODELS.filter(
+    (modelo) => !estaEnCooldown(estadoGemini.modelCooldowns, modelo, ahora)
+  );
+  const embeddings = MODELOS_EMBEDDING.filter(
+    (modelo) => !estaEnCooldown(estadoGemini.embeddingCooldowns, modelo, ahora)
+  );
+
+  const tareas = [];
+
+  if (modelos.length > 0) {
+    const carrerasGeneracion = modelos.map(async (modelo) => {
+      try {
+        const texto = await invocarGeneracionRemota(modelo, {
+          contents: 'ping',
+          temperature: 0,
+          timeoutMs: TIMEOUT_REMOTO_MS,
+        });
+        registrarModeloExitoso(modelo);
+        return { modelo, texto };
+      } catch (error) {
+        if (esErrorDeCooldown(error)) marcarModeloEnCooldown(modelo);
+        throw error;
+      }
+    });
+
+    tareas.push(Promise.any(carrerasGeneracion).catch(() => null));
+  }
+
+  if (embeddings.length > 0) {
+    const carrerasEmbedding = embeddings.map(async (modelo) => {
+      try {
+        const vector = await invocarEmbeddingRemoto(modelo, 'ping');
+        marcarEmbeddingExitoso(modelo);
+        return { modelo, vector };
+      } catch (error) {
+        if (esErrorDeCooldown(error)) marcarEmbeddingEnCooldown(modelo);
+        throw error;
+      }
+    });
+
+    tareas.push(Promise.any(carrerasEmbedding).catch(() => null));
+  }
+
+  if (tareas.length > 0) {
+    await conPresupuesto(
+      Promise.all(tareas),
+      PRESUPUESTO_WARMUP_MS,
+      'precalentamiento Gemini'
+    ).catch(() => {});
+  }
+
+  return {
+    activeModel: getActiveModel(),
+    embeddingModel: getActiveEmbeddingModel(),
+    latencia_ms: Date.now() - inicio,
+    disponible: Boolean(getActiveModel() || getActiveEmbeddingModel()),
+  };
+}
+
+/**
+ * Precalienta de forma asíncrona el cliente de Gemini y descubre en paralelo
+ * el primer modelo de generación/embedding operativo. Es idempotente mientras
+ * una ejecución esté en curso y nunca lanza excepciones hacia el llamador.
+ */
+export function warmupGeminiRAG() {
+  if (!warmupEnCurso) {
+    warmupEnCurso = ejecutarWarmupGemini().finally(() => {
+      warmupEnCurso = null;
+    });
+  }
+  return warmupEnCurso;
 }
 
 /**

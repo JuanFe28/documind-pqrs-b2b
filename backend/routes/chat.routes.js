@@ -12,6 +12,11 @@ import {
   listarMensajes,
   eliminarThread,
 } from '../controllers/chat.controller.js';
+import {
+  warmupGeminiRAG,
+  getActiveModel,
+  getActiveEmbeddingModel,
+} from '../services/gemini.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -37,6 +42,28 @@ const upload = multer({
   storage,
   limits: { fileSize: 15 * 1024 * 1024 }, // 15 MB
 });
+
+// Alias de precalentamiento (no bloqueante, sin autenticación para permitir el warmup inicial)
+async function manejarWarmupChat(req, res) {
+  const inicio = Date.now();
+  let resultado = {};
+  try {
+    resultado = await warmupGeminiRAG();
+  } catch (error) {
+    console.warn('[Gemini Warmup] No se pudo precalentar:', error.message);
+  }
+
+  return res.status(200).json({
+    ok: true,
+    warmed: true,
+    activeModel: resultado.activeModel ?? getActiveModel(),
+    embeddingModel: resultado.embeddingModel ?? getActiveEmbeddingModel(),
+    latencia_ms: Date.now() - inicio,
+  });
+}
+
+router.post('/warmup', manejarWarmupChat);
+router.get('/warmup', manejarWarmupChat);
 
 router.use(authMiddleware);
 

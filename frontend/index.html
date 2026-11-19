@@ -1,14 +1,41 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="light" data-corp-theme="daylight">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <meta name="theme-color" content="#F8FAFC" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%234f46e5'/%3E%3Cpath d='M20 15h17l9 9v25H20z' fill='none' stroke='white' stroke-width='3' stroke-linejoin='round'/%3E%3Cpath d='M37 15v9h9M27 32h14M27 40h10' fill='none' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="DocuMind - Sistema Inteligente de Gestión Documental con IA. Clasifica, indexa y consulta tus documentos empresariales usando Gemini AI y búsqueda semántica vectorial." />
     <meta name="keywords" content="DocuMind, gestión documental, inteligencia artificial, Gemini, RAG, UTS" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <script>
+      (function () {
+        try {
+          var mapaTemas = {
+            light: 'daylight',
+            dark: 'obsidian',
+            daylight: 'daylight',
+            slate: 'slate',
+            obsidian: 'obsidian',
+          };
+          var guardado = localStorage.getItem('documind_theme');
+          var corpTheme = mapaTemas[guardado] || 'daylight';
+          var esquema = corpTheme === 'obsidian' ? 'dark' : 'light';
+          document.documentElement.dataset.corpTheme = corpTheme;
+          document.documentElement.dataset.theme = esquema;
+          document.documentElement.style.colorScheme = esquema;
+        } catch (e) {
+          document.documentElement.dataset.corpTheme = 'daylight';
+          document.documentElement.dataset.theme = 'light';
+          document.documentElement.style.colorScheme = 'light';
+        }
+      })();
+    </script>
     <title>DocuMind Enterprise — Plataforma RAG, PQRS & Agentes IA</title>
   </head>
   <body>

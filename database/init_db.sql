@@ -233,11 +233,16 @@ CREATE INDEX IF NOT EXISTS idx_pqrs_logs_flujo ON pqrs_logs_ejecuciones(flujo);
 CREATE INDEX IF NOT EXISTS idx_pqrs_logs_fecha ON pqrs_logs_ejecuciones(created_at DESC);
 
 -- Agentes de ejemplo del proyecto original. Son responsables de notas, no cuentas de acceso.
+-- Semilla idempotente por id: reejecutar el script no duplica ni desalinea los 3 agentes base.
 INSERT INTO usuarios_agentes(id,nombre,email,departamento,rol) VALUES
 ('a0000000-0000-0000-0000-000000000001','Andrea Silva','andrea@example.com','Soporte Técnico y Sistemas','SUPERVISOR'),
 ('a0000000-0000-0000-0000-000000000002','Carlos Restrepo','carlos@example.com','Facturación y Cobranzas','AGENTE'),
 ('a0000000-0000-0000-0000-000000000003','Valeria Gómez','valeria@example.com','Control de Calidad y Garantías','AGENTE')
-ON CONFLICT(id) DO NOTHING;
+ON CONFLICT(id) DO UPDATE SET
+    nombre = EXCLUDED.nombre,
+    departamento = EXCLUDED.departamento,
+    rol = EXCLUDED.rol,
+    activo = true;
 -- No se insertan solicitudes simuladas. Los ejemplos siguen disponibles en el formulario.
 
 CREATE OR REPLACE FUNCTION pqrs_radicar(p JSONB) RETURNS JSONB LANGUAGE plpgsql AS $$

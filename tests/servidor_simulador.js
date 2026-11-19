@@ -10,12 +10,11 @@ const PORT = 5678;
 
 const estadosValidos = ['NUEVO', 'ASIGNADO', 'EN_GESTION', 'ESPERANDO_CLIENTE', 'RESUELTO', 'CERRADO'];
 
-// Directorio de agentes corporativos
+// Directorio de agentes corporativos sincronizado con database/init_db.sql
 const agentes = [
-  { id: '11111111-1111-4000-8000-000000000001', nombre: 'Andrea Silva', email: 'andrea.silva@empresa.com', rol: 'SUPERVISOR', departamento: 'Soporte Técnico y Sistemas', pass: 'SupervisorSoporte2026*' },
-  { id: '22222222-2222-4000-8000-000000000002', nombre: 'Carlos Morales', email: 'carlos.morales@empresa.com', rol: 'AGENTE', departamento: 'Soporte Técnico y Sistemas', pass: 'AgenteSistemas2026*' },
-  { id: '33333333-3333-4000-8000-000000000003', nombre: 'Laura Mendoza', email: 'laura.mendoza@empresa.com', rol: 'AGENTE', departamento: 'Facturación y Cobranzas', pass: 'AgenteFacturacion2026*' },
-  { id: '44444444-4444-4000-8000-000000000004', nombre: 'Felipe Torres', email: 'felipe.torres@empresa.com', rol: 'AGENTE', departamento: 'Control de Calidad y Garantías', pass: 'AgenteCalidad2026*' }
+  { id: '11111111-1111-4000-8000-000000000001', nombre: 'Andrea Silva', email: 'andrea.silva@techflow.co', rol: 'SUPERVISOR', departamento: 'Soporte Técnico', pass: 'SupervisorSoporte2026*' },
+  { id: '22222222-2222-4000-8000-000000000002', nombre: 'Carlos Restrepo', email: 'carlos.restrepo@techflow.co', rol: 'AGENTE', departamento: 'Facturación y Cobranzas', pass: 'AgenteFacturacion2026*' },
+  { id: '33333333-3333-4000-8000-000000000003', nombre: 'Valeria Gómez', email: 'valeria.gomez@techflow.co', rol: 'AGENTE', departamento: 'Calidad y Servicio', pass: 'AgenteCalidad2026*' }
 ];
 
 let contadorRadicado = 891500;
@@ -71,13 +70,13 @@ const tickets = [
     fecha_radicacion: new Date(Date.now() - 2 * 3600000).toISOString(),
     fecha_resolucion: null,
     version: 1,
-    agente_asignado_id: '33333333-3333-4000-8000-000000000003',
-    agente_asignado: 'Laura Mendoza',
+    agente_asignado_id: '22222222-2222-4000-8000-000000000002',
+    agente_asignado: 'Carlos Restrepo',
     satisfaccion_score: null,
     satisfaccion_comentario: null,
     actividades: [
       { autor: 'Sistema n8n', tipo: 'SISTEMA', mensaje: 'Radicado clasificado en Ruta Urgente (Reclamo Alta Prioridad). Escalamiento a Facturación.', fecha: new Date(Date.now() - 2 * 3600000).toISOString(), es_nota_interna: false },
-      { autor: 'Laura Mendoza', tipo: 'AGENTE', mensaje: 'Validando comprobante de pasarela de pagos con el banco recaudador.', fecha: new Date(Date.now() - 1 * 3600000).toISOString(), es_nota_interna: true }
+      { autor: 'Carlos Restrepo', tipo: 'AGENTE', mensaje: 'Validando comprobante de pasarela de pagos con el banco recaudador.', fecha: new Date(Date.now() - 1 * 3600000).toISOString(), es_nota_interna: true }
     ]
   }
 ];
@@ -308,7 +307,7 @@ const server = http.createServer(async (req, res) => {
           ...t,
           actividades: t.actividades
         })),
-        agentes: agentes.map(a => ({ id: a.id, nombre: a.nombre, rol: a.rol, departamento: a.departamento }))
+        agentes: agentes.map(a => ({ id: a.id, nombre: a.nombre, email: a.email, rol: a.rol, departamento: a.departamento }))
       }));
       return;
     }
@@ -398,9 +397,10 @@ const server = http.createServer(async (req, res) => {
     // 5. CALIFICACIÓN CSAT (POST)
     if (pathname === '/webhook/calificar-ticket' && req.method === 'POST') {
       const body = await parseJsonBody(req);
-      const { ticket_id, tracking_token, puntuacion, retroalimentacion } = body;
+      const { ticket_id, tracking_token, token, puntuacion, retroalimentacion } = body;
+      const credencial = tracking_token || token;
 
-      const ticket = tickets.find(t => t.ticket_id === ticket_id && t.tracking_token === tracking_token);
+      const ticket = tickets.find(t => t.ticket_id === ticket_id && t.tracking_token === credencial);
       if (!ticket) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'error', codigo: 404, mensaje: 'Ticket no válido para calificación.' }));

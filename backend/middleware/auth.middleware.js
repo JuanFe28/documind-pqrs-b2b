@@ -19,6 +19,18 @@ export function obtenerClaveSecretaJWT() {
 }
 
 /**
+ * Normaliza la identidad decodificada de un JWT: el rol se almacena siempre
+ * en mayúsculas para que los controles RBAC sean consistentes.
+ */
+function normalizarUsuarioToken(decoded) {
+  if (!decoded || typeof decoded !== 'object') return decoded;
+  return {
+    ...decoded,
+    rol: (decoded.rol || '').toUpperCase(),
+  };
+}
+
+/**
  * Middleware de autenticación JWT.
  * Verifica el Bearer token del header Authorization e inyecta req.user.
  */
@@ -40,7 +52,7 @@ export function authMiddleware(req, res, next) {
   try {
     const secret = obtenerClaveSecretaJWT();
     const decoded = jwt.verify(token, secret);
-    req.user = decoded; // { id, nombre, email, rol }
+    req.user = normalizarUsuarioToken(decoded); // { id, nombre, email, rol, departamento? }
     next();
   } catch (err) {
     if (err.message && err.message.includes('JWT_SECRET no está definido')) {
@@ -78,7 +90,7 @@ export function verificarTokenOpcional(req, res, next) {
   try {
     const secret = obtenerClaveSecretaJWT();
     const decoded = jwt.verify(token, secret);
-    req.user = decoded; // { id, nombre, email, rol }
+    req.user = normalizarUsuarioToken(decoded); // { id, nombre, email, rol, departamento? }
     next();
   } catch (err) {
     if (err.message && err.message.includes('JWT_SECRET no está definido')) {
@@ -94,8 +106,12 @@ export function verificarTokenOpcional(req, res, next) {
  * @param {...string} roles - Roles permitidos (ej: 'ADMIN', 'LEGAL')
  */
 export function requireRol(...roles) {
+  const rolesNormalizados = roles.map((rol) => String(rol || '').toUpperCase());
   return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.rol)) {
+    if (req.user) {
+      req.user.rol = (req.user.rol || '').toUpperCase();
+    }
+    if (!req.user || !rolesNormalizados.includes(req.user.rol)) {
       return res.status(403).json({
         ok: false,
         mensaje: `Acceso denegado. Se requiere rol: ${roles.join(' o ')}.`,

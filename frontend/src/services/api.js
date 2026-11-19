@@ -49,8 +49,14 @@ export const documentsAPI = {
 
 // ─── Chat RAG ────────────────────────────────────────────────────────────────
 export const chatAPI = {
-  query: (query, repositorio_id, thread_id) =>
-    api.post('/chat/query', { query, repositorio_id: repositorio_id || undefined, thread_id }),
+  warmup: () => api.post('/documind/warmup', null, { timeout: 12000 }),
+  query: (payload, repositorio_id, thread_id) => {
+    const body =
+      payload && typeof payload === 'object'
+        ? { ...payload }
+        : { query: payload, repositorio_id: repositorio_id || undefined, thread_id };
+    return api.post('/chat/query', body);
+  },
   queryMultimodal: (formData) =>
     api.post('/chat/multimodal', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

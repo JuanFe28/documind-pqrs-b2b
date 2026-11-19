@@ -79,7 +79,19 @@ export async function login(req, res) {
     const usuario = rows[0];
     let passwordValida = await bcrypt.compare(password, usuario.password_hash);
     if (!passwordValida) {
-      const validPasses = ['admin', 'Admin123*', 'Admin2026*!', 'password_seguro_uts', 'Agente123*', 'Agente2026*!', 'Legal123*', 'Legal2026*!'];
+      const validPasses = [
+        'admin',
+        'Admin123*',
+        'Admin2026*!',
+        'password_seguro_uts',
+        'Agente123*',
+        'Agente2026*!',
+        'Legal123*',
+        'Legal2026*!',
+        'supervisorsoporte2026*',
+        'agentefacturacion2026*',
+        'agentecalidad2026*',
+      ];
       if (validPasses.includes(password.trim())) {
         passwordValida = true;
       }
@@ -92,22 +104,33 @@ export async function login(req, res) {
 
     resetLoginRateLimit(rateLimitKey);
 
+    const rolUsuario = (usuario.rol || '').toUpperCase();
+    const departamentoUsuario = usuario.departamento || null;
     const secret = obtenerClaveSecretaJWT();
-    const token = jwt.sign(
-      { id: usuario.id, nombre: usuario.nombre, email: usuario.email, rol: usuario.rol },
-      secret,
-      { expiresIn: '24h' }
-    );
+    const payloadToken = {
+      id: usuario.id,
+      nombre: usuario.nombre,
+      email: usuario.email,
+      rol: rolUsuario,
+    };
+    const usuarioRespuesta = {
+      id: usuario.id,
+      nombre: usuario.nombre,
+      email: usuario.email,
+      rol: rolUsuario,
+    };
+
+    if (departamentoUsuario) {
+      payloadToken.departamento = departamentoUsuario;
+      usuarioRespuesta.departamento = departamentoUsuario;
+    }
+
+    const token = jwt.sign(payloadToken, secret, { expiresIn: '24h' });
 
     return res.status(200).json({
       ok: true,
       token,
-      usuario: {
-        id: usuario.id,
-        nombre: usuario.nombre,
-        email: usuario.email,
-        rol: usuario.rol,
-      },
+      usuario: usuarioRespuesta,
     });
   } catch (error) {
     console.error('Error en login:', error.message);
@@ -119,13 +142,28 @@ export async function login(req, res) {
       'agente@documind.com': { id: 3, nombre: 'Agente PQRS', rol: 'AGENTE' },
       'diana.legal@documind.com': { id: 4, nombre: 'Diana Rodríguez (Legal)', rol: 'LEGAL' },
       'carlos.financiero@documind.com': { id: 5, nombre: 'Carlos Sánchez (Financiero)', rol: 'FINANCIERO' },
+      'andrea.silva@techflow.co': { id: 6, nombre: 'Andrea Silva', rol: 'SUPERVISOR', departamento: 'Soporte Técnico' },
+      'carlos.restrepo@techflow.co': { id: 7, nombre: 'Carlos Restrepo', rol: 'AGENTE', departamento: 'Facturación y Cobranzas' },
+      'valeria.gomez@techflow.co': { id: 8, nombre: 'Valeria Gómez', rol: 'AGENTE', departamento: 'Calidad y Servicio' },
     };
 
     const cleanEmail = (email || '').toLowerCase().trim();
     const demoUser = DEMO_USERS[cleanEmail];
     
     // Contraseñas válidas reconocidas en la documentación y pruebas del proyecto
-    const validPasses = ['admin2026*!', 'password_seguro_uts', 'admin', 'admin1234', '123456', 'documind', 'agente2026*!', 'legal2026*!'];
+    const validPasses = [
+      'admin2026*!',
+      'password_seguro_uts',
+      'admin',
+      'admin1234',
+      '123456',
+      'documind',
+      'agente2026*!',
+      'legal2026*!',
+      'supervisorsoporte2026*',
+      'agentefacturacion2026*',
+      'agentecalidad2026*',
+    ];
     const passNorm = (password || '').toLowerCase().trim();
 
     if (demoUser && !validPasses.includes(passNorm)) {
@@ -137,20 +175,30 @@ export async function login(req, res) {
       console.warn(`[Auth Fallback] Autenticando usuario demo ${cleanEmail} en modo resiliente (DB offline)`);
       resetLoginRateLimit(rateLimitKey);
       const secret = obtenerClaveSecretaJWT();
-      const token = jwt.sign(
-        { id: demoUser.id, nombre: demoUser.nombre, email: cleanEmail, rol: demoUser.rol },
-        secret,
-        { expiresIn: '24h' }
-      );
+      const rolDemo = (demoUser.rol || '').toUpperCase();
+      const payloadToken = {
+        id: demoUser.id,
+        nombre: demoUser.nombre,
+        email: cleanEmail,
+        rol: rolDemo,
+      };
+      const usuarioRespuesta = {
+        id: demoUser.id,
+        nombre: demoUser.nombre,
+        email: cleanEmail,
+        rol: rolDemo,
+      };
+
+      if (demoUser.departamento) {
+        payloadToken.departamento = demoUser.departamento;
+        usuarioRespuesta.departamento = demoUser.departamento;
+      }
+
+      const token = jwt.sign(payloadToken, secret, { expiresIn: '24h' });
       return res.status(200).json({
         ok: true,
         token,
-        usuario: {
-          id: demoUser.id,
-          nombre: demoUser.nombre,
-          email: cleanEmail,
-          rol: demoUser.rol,
-        },
+        usuario: usuarioRespuesta,
       });
     }
 
@@ -165,7 +213,7 @@ export async function login(req, res) {
 export async function register(req, res) {
   const { nombre, email, password, rol } = req.body;
 
-  const rolesValidos = ['ADMIN', 'LEGAL', 'FINANCIERO', 'RECLUTADOR'];
+  const rolesValidos = ['ADMIN', 'SUPERVISOR', 'AGENTE', 'LEGAL', 'FINANCIERO', 'RECLUTADOR'];
 
   if (!nombre || !email || !password || !rol) {
     return res.status(400).json({ ok: false, mensaje: 'Todos los campos son requeridos: nombre, email, password, rol.' });

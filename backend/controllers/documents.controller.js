@@ -238,7 +238,7 @@ export async function uploadDocumento(req, res) {
     // 6. Generar embeddings para cada chunk e indexar en Pinecone
     const chunksConEmbedding = [];
     for (let i = 0; i < textosChunks.length; i++) {
-      const embedding = await generarEmbeddingGoogle(textosChunks[i]);
+      const embedding = await generarEmbeddingGoogle(textosChunks[i], { presupuestoMaximoMs: 3000 });
       chunksConEmbedding.push({
         texto: textosChunks[i],
         embedding,

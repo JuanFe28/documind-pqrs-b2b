@@ -1,10 +1,14 @@
-import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
-import { getSecret } from '../utils/secrets.js';
-import { GEMINI_FLASH_MODELS } from '../config/geminiModels.js';
+import {
+  isGeminiConfigured,
+  getLastWorkingModel,
+  isModelInCooldown,
+  obtenerModelosCandidatosGeneracion,
+  generarContenidoMultimodalGemini,
+} from './gemini.service.js';
 import { registrarLogEjecucion, clasificarDepartamento, evaluarSla } from './automation.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -12,23 +16,8 @@ const __dirname = dirname(__filename);
 dotenv.config({ path: join(__dirname, '../.env') });
 dotenv.config({ path: join(__dirname, '../config/.env') });
 
-const geminiApiKey = getSecret('GEMINI_API_KEY', {
-  defaultValue: process.env.GEMINI_API_KEY || null,
-  disallowDefaultInProduction: false,
-});
-
-const ai = new GoogleGenAI({ apiKey: geminiApiKey || '' });
-
-/**
- * Envoltorio con timeout para peticiones de visión
- */
-function conTimeout(promesa, ms = 15000) {
-  let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Tiempo de espera de visión agotado (${ms}ms)`)), ms);
-  });
-  return Promise.race([promesa, timeout]).finally(() => clearTimeout(timer));
-}
+const PRESUPUESTO_MULTIMODAL_MS = 3500;
+const TIMEOUT_POR_INTENTO_MS = 3000;
 
 const ETIQUETAS_CORTE = /\s+(?:correo|e-?mail|tel[eé]fono|celular|documento|identificaci[oó]n)\s*:/i;
 
@@ -301,8 +290,8 @@ export async function procesarFormularioConVision(fileBuffer, mimeType, nombreAr
     throw new Error('El archivo proporcionado está vacío.');
   }
 
-  // Si no hay API Key de Gemini configurada, conmutar inmediatamente a Plan B
-  if (!geminiApiKey) {
+  // Sin GEMINI_API_KEY utilizable: short-circuit inmediato (0ms) al Plan B
+  if (!isGeminiConfigured()) {
     console.warn('[Vision Service] GEMINI_API_KEY no configurada. Conmutando a Plan B.');
     const resultadoPlanB = ejecutarPlanBHeuristico(fileBuffer, mimeType, nombreArchivo);
     await registrarLogEjecucion({
@@ -357,49 +346,44 @@ Reglas estrictas:
 5. NO agregues texto conversacional fuera del JSON.
 `;
 
-    const modelos = GEMINI_FLASH_MODELS;
-    let response = null;
-    let modeloExitoso = modelos[0];
-    const erroresModelos = [];
+    // Circuit Breaker compartido con el motor RAG: prioriza el modelo caliente
+    // (si no está en cooldown), filtra modelos en cooldown y ejecuta una carrera
+    // paralela acotada a 3500ms con AbortSignal.timeout(3000) por intento.
+    const modeloCaliente = getLastWorkingModel();
+    const candidatos = obtenerModelosCandidatosGeneracion();
+    if (candidatos.length === 0) {
+      throw new Error('Todos los modelos multimodales están en cooldown; Plan B inmediato');
+    }
 
-    for (const mod of modelos) {
-      try {
-        response = await conTimeout(
-          ai.models.generateContent({
-            model: mod,
-            contents: [
-              {
-                role: 'user',
-                parts: [
-                  { text: promptVision },
-                  {
-                    inlineData: {
-                      mimeType: mimeType || 'image/jpeg',
-                      data: base64Data,
-                    },
-                  },
-                ],
+    const resultadoMultimodal = await generarContenidoMultimodalGemini({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: promptVision },
+            {
+              inlineData: {
+                mimeType: mimeType || 'image/jpeg',
+                data: base64Data,
               },
-            ],
-          }),
-          12000
-        );
-        if (response && response.text) {
-          modeloExitoso = mod;
-          break;
-        }
-      } catch (modErr) {
-        erroresModelos.push(`${mod}: ${String(modErr.message || modErr).slice(0, 120)}`);
-      }
+            },
+          ],
+        },
+      ],
+      presupuestoMaximoMs: PRESUPUESTO_MULTIMODAL_MS,
+      timeoutPorIntentoMs: TIMEOUT_POR_INTENTO_MS,
+      temperature: 0.2,
+    });
+
+    if (!resultadoMultimodal.texto) {
+      const detalleCircuito = modeloCaliente && isModelInCooldown(modeloCaliente)
+        ? `circuito abierto para ${modeloCaliente}`
+        : 'circuito abierto por presupuesto de latencia';
+      throw new Error(`Ningún modelo multimodal en la nube respondió satisfactoriamente (${detalleCircuito})`);
     }
 
-    if (!response || !response.text) {
-      throw new Error(
-        `Ningún modelo multimodal en la nube respondió satisfactoriamente (${erroresModelos.join(' | ') || 'sin detalle'})`
-      );
-    }
-
-    const rawOutput = response.text || '';
+    const modeloExitoso = resultadoMultimodal.modelo;
+    const rawOutput = resultadoMultimodal.texto;
     const jsonMatch = rawOutput.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error('La respuesta de visión no devolvió un JSON legible');

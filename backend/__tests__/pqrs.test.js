@@ -3,8 +3,11 @@ import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import request from 'supertest';
 import { jest } from '@jest/globals';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import app from '../app.js';
 import db from '../config/db.js';
+import { _resetLoginLimiter } from '../controllers/auth.controller.js';
 import { _resetTrackingLimiter } from '../controllers/pqrs.controller.js';
 import { validarRutaCanonicaSegura } from '../controllers/documents.controller.js';
 
@@ -887,5 +890,605 @@ describe('Pruebas de API - Integración Mesa de Ayuda PQRS', () => {
   });
 });
 
+describe('Remediación BUG-001 / BUG-004 / BUG-005 — Normalización, concurrencia optimista y webhooks', () => {
+  const JWT_SECRET = process.env.JWT_SECRET || 'uts_clavedesarrollo_secreta_documind_2026';
+  const TICKET_ID = 'PQRS-2026-999777';
+  const TRACKING_TOKEN = '12345678-1234-4000-8000-123456789012';
 
+  let tokenAgente;
+  let dbQuerySpy;
+  let llamadas;
 
+  beforeAll(() => {
+    tokenAgente = jwt.sign(
+      { id: 77, nombre: 'Agente Concurrencia', email: 'concurrencia@documind.com', rol: 'AGENTE' },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+  });
+
+  beforeEach(() => {
+    _resetTrackingLimiter();
+    llamadas = [];
+    dbQuerySpy = jest.spyOn(db, 'query');
+  });
+
+  afterEach(() => {
+    if (dbQuerySpy) {
+      dbQuerySpy.mockRestore();
+    }
+  });
+
+  test('BUG-004a: GET /api/pqrs?prioridad=CRITICA normaliza a "Crítica" y filtra por valor canónico e histórico', async () => {
+    dbQuerySpy.mockImplementation(async (sql, params) => {
+      const sqlStr = String(sql);
+      llamadas.push({ sql: sqlStr, params });
+
+      if (sqlStr.includes('COUNT(*) AS total')) {
+        return [{ total: 0 }];
+      }
+      return [];
+    });
+
+    const res = await request(app)
+      .get('/api/pqrs?prioridad=CRITICA')
+      .set('Authorization', `Bearer ${tokenAgente}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+
+    const consultaListado = llamadas.find(
+      (llamada) => llamada.sql.includes('FROM pqrs_solicitudes s') && llamada.sql.includes('LIMIT')
+    );
+    expect(consultaListado).toBeDefined();
+    expect(consultaListado.sql).toContain("(s.prioridad IN ('Crítica', 'CRITICA'))");
+    expect(consultaListado.params).not.toContain('CRITICA');
+  });
+
+  test('BUG-004b: GET /api/pqrs/kpis corrige críticos históricos y expone cumplimiento_pct y satisfaccion_promedio', async () => {
+    dbQuerySpy.mockImplementation(async (sql, params) => {
+      const sqlStr = String(sql);
+      llamadas.push({ sql: sqlStr, params });
+
+      if (sqlStr.includes('COUNT(*) AS total_tickets')) {
+        return [{
+          total_tickets: 5,
+          nuevo: 1,
+          criticos_pendientes: 2,
+          cumplimiento_pct: 80,
+          satisfaccion_promedio: '4.50',
+        }];
+      }
+      return [];
+    });
+
+    const res = await request(app)
+      .get('/api/pqrs/kpis')
+      .set('Authorization', `Bearer ${tokenAgente}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(res.body.data.resumen).toHaveProperty('cumplimiento_pct');
+    expect(res.body.data.resumen).toHaveProperty('satisfaccion_promedio');
+
+    const consultaKpis = llamadas.find((llamada) => llamada.sql.includes('COUNT(*) AS total_tickets'));
+    expect(consultaKpis).toBeDefined();
+    expect(consultaKpis.sql).toContain(
+      "FILTER (WHERE prioridad IN ('Crítica', 'CRITICA') AND estado NOT IN ('RESUELTO', 'CERRADO'))"
+    );
+    expect(consultaKpis.sql).toContain('ROUND(AVG(satisfaccion_score)::numeric, 2)');
+  });
+
+  test('BUG-005: PATCH /api/pqrs/:ticketId rechaza versión desactualizada con 409 e incrementa versión al coincidir', async () => {
+    const ticketActual = { id: 7, ticket_id: TICKET_ID, estado: 'EN_GESTION', version: 3 };
+
+    dbQuerySpy.mockImplementation(async (sql, params) => {
+      const sqlStr = String(sql);
+      llamadas.push({ sql: sqlStr, params });
+
+      if (sqlStr.includes('SELECT id, ticket_id, estado, version FROM pqrs_solicitudes')) {
+        return [{ ...ticketActual }];
+      }
+      return [];
+    });
+
+    const conflicto = await request(app)
+      .patch(`/api/pqrs/${TICKET_ID}`)
+      .set('Authorization', `Bearer ${tokenAgente}`)
+      .send({ nuevo_estado: 'RESUELTO', version: 2 });
+
+    expect(conflicto.status).toBe(409);
+    expect(conflicto.body).toMatchObject({ ok: false, status: 'error' });
+    expect(conflicto.body.mensaje).toContain('Conflicto de concurrencia optimista (409)');
+    expect(llamadas.some((llamada) => llamada.sql.includes('UPDATE pqrs_solicitudes'))).toBe(false);
+
+    llamadas = [];
+
+    const actualizacion = await request(app)
+      .patch(`/api/pqrs/${TICKET_ID}`)
+      .set('Authorization', `Bearer ${tokenAgente}`)
+      .send({ nuevo_estado: 'RESUELTO', version: '3', nota: 'Cierre validado por QA' });
+
+    expect(actualizacion.status).toBe(200);
+    expect(actualizacion.body.status).toBe('success');
+    expect(actualizacion.body.data).toEqual({
+      ticket_id: TICKET_ID,
+      estado: 'RESUELTO',
+      version: 4,
+    });
+
+    const update = llamadas.find((llamada) => llamada.sql.includes('UPDATE pqrs_solicitudes'));
+    expect(update).toBeDefined();
+    expect(update.sql).toContain('version = COALESCE(version, 1) + 1');
+    expect(update.sql).toContain("CASE WHEN ? IN ('RESUELTO', 'CERRADO')");
+
+    const insert = llamadas.find((llamada) => llamada.sql.includes('INSERT INTO pqrs_actividades'));
+    expect(insert).toBeDefined();
+    expect(insert.sql).toContain('estado_anterior');
+    expect(insert.params).toEqual(expect.arrayContaining(['EN_GESTION', 'RESUELTO']));
+  });
+
+  test('BUG-001: POST /webhook/calificar-ticket acepta indistintamente tracking_token o token', async () => {
+    dbQuerySpy.mockImplementation(async (sql, params) => {
+      const sqlStr = String(sql);
+      llamadas.push({ sql: sqlStr, params });
+
+      if (sqlStr.includes('SELECT pqrs_calificar')) {
+        return [{
+          res: {
+            status: 'success',
+            codigo: 200,
+            ticket_id: params[0],
+            score: params[2],
+            mensaje: 'Calificación almacenada con éxito.',
+          },
+        }];
+      }
+      return [];
+    });
+
+    for (const campo of ['tracking_token', 'token']) {
+      const res = await request(app)
+        .post('/webhook/calificar-ticket')
+        .send({
+          ticket_id: TICKET_ID,
+          [campo]: TRACKING_TOKEN,
+          puntuacion: 5,
+          retroalimentacion: 'Excelente atención',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('success');
+    }
+
+    const calificaciones = llamadas.filter((llamada) => llamada.sql.includes('SELECT pqrs_calificar'));
+    expect(calificaciones).toHaveLength(2);
+    for (const llamada of calificaciones) {
+      expect(llamada.params[0]).toBe(TICKET_ID);
+      expect(llamada.params[1]).toBe(TRACKING_TOKEN);
+    }
+  });
+});
+
+describe('SPRINT 1 - RBAC de cuentas operativas y repositorio oficial Normativa PQRS', () => {
+  const JWT_SECRET = process.env.JWT_SECRET || 'uts_clavedesarrollo_secreta_documind_2026';
+  let dbQuerySpy;
+
+  beforeEach(() => {
+    _resetLoginLimiter();
+    dbQuerySpy = jest.spyOn(db, 'query');
+  });
+
+  afterEach(() => {
+    if (dbQuerySpy && dbQuerySpy.mockRestore) {
+      dbQuerySpy.mockRestore();
+    }
+  });
+
+  test('RBAC-01: Login exitoso de SUPERVISOR (Andrea Silva) con departamento en JWT', async () => {
+    const hashDistinto = await bcrypt.hash('clave-interna-no-evaluacion', 4);
+    dbQuerySpy.mockResolvedValueOnce([
+      {
+        id: 6,
+        nombre: 'Andrea Silva',
+        email: 'andrea.silva@techflow.co',
+        password_hash: hashDistinto,
+        rol: 'SUPERVISOR',
+        departamento: 'Soporte Técnico',
+      },
+    ]);
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'andrea.silva@techflow.co', password: 'supervisorsoporte2026*' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.usuario).toMatchObject({
+      id: 6,
+      nombre: 'Andrea Silva',
+      rol: 'SUPERVISOR',
+      departamento: 'Soporte Técnico',
+    });
+
+    const payload = jwt.verify(res.body.token, JWT_SECRET);
+    expect(payload.rol).toBe('SUPERVISOR');
+    expect(payload.departamento).toBe('Soporte Técnico');
+  });
+
+  test('RBAC-02: Login exitoso de AGENTE (Carlos Restrepo) con credencial de evaluación', async () => {
+    const hashDistinto = await bcrypt.hash('clave-interna-no-evaluacion', 4);
+    dbQuerySpy.mockResolvedValueOnce([
+      {
+        id: 7,
+        nombre: 'Carlos Restrepo',
+        email: 'carlos.restrepo@techflow.co',
+        password_hash: hashDistinto,
+        rol: 'AGENTE',
+        departamento: 'Facturación y Cobranzas',
+      },
+    ]);
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'carlos.restrepo@techflow.co', password: 'agentefacturacion2026*' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.usuario).toMatchObject({
+      id: 7,
+      nombre: 'Carlos Restrepo',
+      rol: 'AGENTE',
+      departamento: 'Facturación y Cobranzas',
+    });
+
+    const payload = jwt.verify(res.body.token, JWT_SECRET);
+    expect(payload.rol).toBe('AGENTE');
+    expect(payload.departamento).toBe('Facturación y Cobranzas');
+  });
+
+  test('RBAC-03: Fallback offline autentica a Valeria Gómez con departamento Calidad y Servicio', async () => {
+    dbQuerySpy.mockRejectedValueOnce(new Error('PostgreSQL no disponible'));
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'valeria.gomez@techflow.co', password: 'agentecalidad2026*' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.usuario).toMatchObject({
+      nombre: 'Valeria Gómez',
+      rol: 'AGENTE',
+      departamento: 'Calidad y Servicio',
+    });
+  });
+
+  test('RBAC-04: SUPERVISOR lista su repositorio propio y el oficial Normativa PQRS sin abrir Legal/Financiero', async () => {
+    const tokenSupervisor = jwt.sign(
+      {
+        id: 6,
+        nombre: 'Andrea Silva',
+        email: 'andrea.silva@techflow.co',
+        rol: 'SUPERVISOR',
+        departamento: 'Soporte Técnico',
+      },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    let sqlEjecutado = '';
+    let paramsEjecutados = [];
+    dbQuerySpy.mockImplementationOnce(async (sql, params) => {
+      sqlEjecutado = String(sql);
+      paramsEjecutados = params;
+      return [
+        {
+          id: 3,
+          slug: 'normativa-pqrs',
+          nombre: 'Manuales, Normativa y Protocolos PQRS',
+          departamento: 'Normativa PQRS',
+          usuario_id: 1,
+        },
+        {
+          id: 11,
+          slug: 'soporte-interno',
+          nombre: 'Base de Conocimiento Soporte Técnico',
+          departamento: 'Soporte Técnico',
+          usuario_id: 6,
+        },
+      ];
+    });
+
+    const res = await request(app)
+      .get('/api/repositories')
+      .set('Authorization', `Bearer ${tokenSupervisor}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+
+    const nombres = res.body.repositorios.map((r) => r.nombre);
+    expect(nombres).toContain('Manuales, Normativa y Protocolos PQRS');
+    expect(res.body.repositorios.some((r) => r.departamento === 'Legal')).toBe(false);
+    expect(res.body.repositorios.some((r) => r.departamento === 'Financiero')).toBe(false);
+
+    expect(sqlEjecutado).toContain("r.slug = 'normativa-pqrs'");
+    expect(sqlEjecutado).toContain("r.departamento = 'Normativa PQRS'");
+    expect(sqlEjecutado).toContain('r.usuario_id = ?');
+    expect(sqlEjecutado).toContain('r.departamento = ?');
+    expect(sqlEjecutado).not.toMatch(/r\.departamento\s*=\s*'Legal'/i);
+    expect(sqlEjecutado).not.toMatch(/r\.departamento\s*=\s*'Financiero'/i);
+    expect(paramsEjecutados).toContain(6);
+    expect(paramsEjecutados).toContain('Soporte Técnico');
+    expect(paramsEjecutados).not.toContain('Legal');
+    expect(paramsEjecutados).not.toContain('Financiero');
+  });
+
+  test('RBAC-05: AGENTE lista el repositorio oficial Normativa PQRS y su departamento, sin acceso global', async () => {
+    const tokenAgente = jwt.sign(
+      {
+        id: 7,
+        nombre: 'Carlos Restrepo',
+        email: 'carlos.restrepo@techflow.co',
+        rol: 'AGENTE',
+        departamento: 'Facturación y Cobranzas',
+      },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    let sqlEjecutado = '';
+    let paramsEjecutados = [];
+    dbQuerySpy.mockImplementationOnce(async (sql, params) => {
+      sqlEjecutado = String(sql);
+      paramsEjecutados = params;
+      return [
+        {
+          id: 3,
+          slug: 'normativa-pqrs',
+          nombre: 'Manuales, Normativa y Protocolos PQRS',
+          departamento: 'Normativa PQRS',
+          usuario_id: 1,
+        },
+        {
+          id: 12,
+          slug: 'facturacion-interna',
+          nombre: 'Manual Interno de Facturación',
+          departamento: 'Facturación y Cobranzas',
+          usuario_id: 7,
+        },
+      ];
+    });
+
+    const res = await request(app)
+      .get('/api/repositories')
+      .set('Authorization', `Bearer ${tokenAgente}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.repositorios.map((r) => r.nombre)).toContain('Manuales, Normativa y Protocolos PQRS');
+    expect(res.body.repositorios.some((r) => r.departamento === 'Legal')).toBe(false);
+    expect(res.body.repositorios.some((r) => r.departamento === 'Financiero')).toBe(false);
+
+    expect(sqlEjecutado).toContain("r.slug = 'normativa-pqrs'");
+    expect(sqlEjecutado).toContain("r.departamento = 'Normativa PQRS'");
+    expect(sqlEjecutado).toContain('r.usuario_id = ?');
+    expect(paramsEjecutados).toContain(7);
+    expect(paramsEjecutados).toContain('Facturación y Cobranzas');
+  });
+});
+
+describe('SPRINT 2 - Copiloto PQRS Context-Fusion (POST /api/chat/query con ticket_id)', () => {
+  const JWT_SECRET = process.env.JWT_SECRET || 'uts_clavedesarrollo_secreta_documind_2026';
+  const TICKET_ID = 'PQRS-2026-891501';
+  const EMOJI_REGEX = /\p{Extended_Pictographic}/u;
+  const SECCION_DIAGNOSTICO = '### Diagnóstico Operativo y Severidad SLA';
+  const SECCION_PASOS = '### Pasos Internos de Resolución';
+  const SECCION_BORRADOR = '### Borrador de Respuesta Formal al Ciudadano';
+
+  let tokenAgente;
+  let tokenSupervisor;
+  let tokenReclutador;
+  let dbQuerySpy;
+  let llamadas;
+
+  const ticketMock = {
+    ticket_id: TICKET_ID,
+    estado: 'EN_GESTION',
+    prioridad: 'Alta',
+    departamento: 'Facturación y Cobranzas',
+    sla_horas: 4,
+    sla_fecha_limite: new Date(Date.now() + 2 * 3600 * 1000).toISOString(),
+    es_urgente: true,
+    asunto: 'Cobro duplicado en factura mensual',
+    descripcion: 'El cliente reporta un cobro duplicado en su factura de servicios del mes en curso.',
+    tipo_solicitud: 'Reclamo',
+    tipo: 'Reclamo',
+  };
+
+  const actividadMock = {
+    autor_nombre: 'Carlos Restrepo',
+    autor_tipo: 'AGENTE',
+    es_nota_interna: false,
+    mensaje: 'Se solicita verificación de la transacción en la pasarela de pagos.',
+    estado_anterior: 'NUEVO',
+    estado_nuevo: 'EN_GESTION',
+    created_at: new Date().toISOString(),
+  };
+
+  const adjuntoMock = {
+    id: 501,
+    nombre_archivo: 'evidencia_cobro_duplicado.pdf',
+    categoria_detectada: 'Factura',
+    resumen_ia: 'Soporte del cobro duplicado con dos débitos de la misma orden de servicio.',
+    url_descarga: '/uploads/evidencia_cobro_duplicado.pdf',
+    repositorio_id: 2,
+  };
+
+  const normativaMock = {
+    documento_id: 301,
+    chunk_index: 0,
+    texto_chunk: 'Manual de Facturación y Notas Crédito: ante un cobro duplicado, verificar la transacción en la pasarela de pagos y registrar el caso como Reclamo de prioridad Alta con plazo de 4 horas.',
+    nombre_archivo: 'manual_facturacion_y_notas_credito.md',
+    url_descarga: '/uploads/normativa-pqrs/manual_facturacion_y_notas_credito.md',
+    repositorio_id: 3,
+  };
+
+  beforeAll(() => {
+    tokenAgente = jwt.sign(
+      { id: 7, nombre: 'Carlos Restrepo', email: 'carlos.restrepo@techflow.co', rol: 'AGENTE', departamento: 'Facturación y Cobranzas' },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+    tokenSupervisor = jwt.sign(
+      { id: 6, nombre: 'Andrea Silva', email: 'andrea.silva@techflow.co', rol: 'SUPERVISOR', departamento: 'Soporte Técnico' },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+    tokenReclutador = jwt.sign(
+      { id: 8, nombre: 'Marta Reclutamiento', email: 'marta.rrhh@techflow.co', rol: 'RECLUTADOR', departamento: 'Recursos Humanos' },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+  });
+
+  beforeEach(() => {
+    llamadas = [];
+    dbQuerySpy = jest.spyOn(db, 'query').mockImplementation(async (sql, params) => {
+      const sentencia = String(sql);
+      llamadas.push({ sql: sentencia, params });
+
+      if (sentencia.includes('FROM pqrs_solicitudes') && sentencia.includes('WHERE ticket_id = ?')) {
+        return [{ ...ticketMock }];
+      }
+      if (sentencia.includes('FROM pqrs_actividades')) {
+        return [{ ...actividadMock }];
+      }
+      if (sentencia.includes('FROM documentos_chunks')) {
+        return [{ ...normativaMock }];
+      }
+      if (sentencia.includes('FROM documentos') && sentencia.includes('ticket_id = ?')) {
+        return [{ ...adjuntoMock }];
+      }
+      return [];
+    });
+  });
+
+  afterEach(() => {
+    if (dbQuerySpy) dbQuerySpy.mockRestore();
+  });
+
+  async function consultarComo(token, body) {
+    const claveAnterior = process.env.GEMINI_API_KEY;
+    process.env.GEMINI_API_KEY = '';
+    try {
+      const inicio = Date.now();
+      const res = await request(app)
+        .post('/api/chat/query')
+        .set('Authorization', `Bearer ${token}`)
+        .send(body);
+      return { res, duracionMs: Date.now() - inicio };
+    } finally {
+      process.env.GEMINI_API_KEY = claveAnterior;
+    }
+  }
+
+  test('S2-02a: AGENTE fusiona ticket + adjunto + normativa oficial y responde en menos de 1500ms', async () => {
+    const { res, duracionMs } = await consultarComo(tokenAgente, {
+      query: '¿Cómo debo resolver este cobro duplicado y qué protocolo aplico?',
+      ticket_id: TICKET_ID,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(duracionMs).toBeLessThan(1500);
+    expect(res.body.latencia_ms).toBeLessThan(1500);
+
+    // Contrato de respuesta del copiloto
+    expect(res.body.contexto_ticket).toMatchObject({
+      ticket_id: TICKET_ID,
+      estado: 'EN_GESTION',
+      prioridad: 'Alta',
+      departamento: 'Facturación y Cobranzas',
+      sla_horas: 4,
+      es_urgente: true,
+    });
+    expect(res.body.contexto_ticket.adjuntos).toHaveLength(1);
+    expect(res.body.contexto_ticket.adjuntos[0].nombre_archivo).toBe('evidencia_cobro_duplicado.pdf');
+    expect(res.body.contexto_ticket.normativa_aplicada).toHaveLength(1);
+    expect(res.body.contexto_ticket.normativa_aplicada[0].nombre_archivo).toBe('manual_facturacion_y_notas_credito.md');
+    expect(res.body.contexto_ticket.normativa_aplicada[0].cita).toContain('cobro duplicado');
+
+    // Tres secciones limpias y sin emojis
+    expect(res.body.respuesta).toContain(SECCION_DIAGNOSTICO);
+    expect(res.body.respuesta).toContain(SECCION_PASOS);
+    expect(res.body.respuesta).toContain(SECCION_BORRADOR);
+    expect(res.body.respuesta).not.toMatch(EMOJI_REGEX);
+    expect(res.body.borrador_respuesta).toBeTruthy();
+    expect(res.body.borrador_respuesta).toContain(TICKET_ID);
+    expect(res.body.borrador_respuesta).not.toContain(SECCION_BORRADOR);
+    expect(res.body.borrador_respuesta).not.toMatch(EMOJI_REGEX);
+
+    // Fuentes oficiales y adjunto citados
+    expect(res.body.fuentes_citadas).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ nombre_archivo: 'manual_facturacion_y_notas_credito.md', origen: 'normativa' }),
+        expect.objectContaining({ nombre_archivo: 'evidencia_cobro_duplicado.pdf', origen: 'adjunto' }),
+      ])
+    );
+
+    // Cruces SQL verificados
+    const consultaTicket = llamadas.find(
+      (llamada) => llamada.sql.includes('FROM pqrs_solicitudes') && llamada.sql.includes('WHERE ticket_id = ?')
+    );
+    expect(consultaTicket).toBeDefined();
+    expect(consultaTicket.params).toEqual([TICKET_ID]);
+
+    const consultaActividades = llamadas.find((llamada) => llamada.sql.includes('FROM pqrs_actividades'));
+    expect(consultaActividades).toBeDefined();
+    expect(consultaActividades.params).toEqual([TICKET_ID]);
+
+    const consultaAdjuntos = llamadas.find(
+      (llamada) => llamada.sql.includes('FROM documentos') && !llamada.sql.includes('documentos_chunks') && llamada.sql.includes('ticket_id = ?')
+    );
+    expect(consultaAdjuntos).toBeDefined();
+    expect(consultaAdjuntos.params).toEqual([TICKET_ID]);
+
+    const consultaNormativa = llamadas.find((llamada) => llamada.sql.includes('FROM documentos_chunks'));
+    expect(consultaNormativa).toBeDefined();
+    expect(consultaNormativa.sql).toContain('r.id = 3');
+    expect(consultaNormativa.sql).toContain("r.slug = 'normativa-pqrs'");
+    expect(consultaNormativa.sql).toContain("r.departamento = 'Normativa PQRS'");
+    expect(consultaNormativa.sql).toContain('ILIKE');
+  });
+
+  test('S2-02b: SUPERVISOR puede fusionar el contexto del mismo ticket', async () => {
+    const { res, duracionMs } = await consultarComo(tokenSupervisor, {
+      query: 'Resume el estado del ticket y la severidad del SLA.',
+      ticket_id: TICKET_ID,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(duracionMs).toBeLessThan(1500);
+    expect(res.body.contexto_ticket.ticket_id).toBe(TICKET_ID);
+    expect(res.body.respuesta).toContain(SECCION_DIAGNOSTICO);
+  });
+
+  test('S2-02c: Rol no operativo (RECLUTADOR) recibe HTTP 403 sin consultar el ticket', async () => {
+    const { res } = await consultarComo(tokenReclutador, {
+      query: 'Intento consultar el contexto de un ticket ajeno.',
+      ticket_id: TICKET_ID,
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.mensaje).toMatch(/Solo perfiles operativos/i);
+    expect(llamadas).toHaveLength(0);
+  });
+
+  test('S2-02d: chat.controller.js no contiene emojis Unicode', () => {
+    const rutaControlador = path.join(__dirname, '../controllers/chat.controller.js');
+    const contenido = fs.readFileSync(rutaControlador, 'utf8');
+    expect(EMOJI_REGEX.test(contenido)).toBe(false);
+  });
+});

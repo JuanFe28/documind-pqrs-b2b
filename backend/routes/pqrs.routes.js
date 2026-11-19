@@ -46,6 +46,7 @@ router.get('/:ticketId', verificarTokenOpcional, obtenerPqrsDetalle);
 router.post('/:ticketId/tracking', consultarPqrsPrivado);
 router.get('/:ticketId/documentos/:documentId', descargarDocumentoCiudadano);
 router.post('/:ticketId/documentos/:documentId/descargar', descargarDocumentoCiudadano);
+router.patch('/:ticketId', verificarToken, actualizarEstadoPqrs);
 router.put('/:ticketId/estado', verificarToken, actualizarEstadoPqrs);
 
 export default router;

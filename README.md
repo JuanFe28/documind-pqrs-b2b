@@ -1,184 +1,64 @@
-# DocuMind & PQRS B2B Enterprise — Plataforma Unificada con Motor Propio de Automatización e IA Multimodal de Visión
+# DocuMind & PQRS B2B Enterprise — Guía Ejecutiva de Operación y Sustentación
 
-Sistema empresarial integral que combina la **Gestión Documental Inteligente (DocuMind)** con la **Mesa de Ayuda y Automatización de PQRS B2B**, potenciado por modelos de lenguaje de última generación (**Google Gemini**), motor propio de automatización en Node.js/Express (Ruta A) y **Módulo de Visión por Computador e IA Multimodal** para digitalización de formularios físicos.
-
-## 🎓 Tercer Corte: Entrega Completa (Motor Propio + Visión Multimodal)
-
-- **Documento Técnico Oficial (Máx. 10 págs):** [`docs/DOCUMENTO_TECNICO_TERCER_CORTE.md`](docs/DOCUMENTO_TECNICO_TERCER_CORTE.md)
-- **Reporte Estadístico del Benchmark (20 Imágenes):** [`docs/REPORTE_EVALUACION_VISION_20.md`](docs/REPORTE_EVALUACION_VISION_20.md)
-- **Guía Académica Docente (Wilson Castaño Galviz):** [`docs/Guia_Tercer_Corte_Desarrollo_de_Aplicaciones_Empresariales.pdf`](docs/Guia_Tercer_Corte_Desarrollo_de_Aplicaciones_Empresariales.pdf)
-- **Diseño Semana 1 (documento histórico):** [PDF de dos páginas](docs/SEMANA_1_DISENO.pdf) y [fuente editable](docs/SEMANA_1_DISENO.md)
-
-### Capacidades Desarrolladas en este Corte:
-1. **Componente 1 (Automatización Propia en Código - Ruta A):** Reemplazo del 100% de n8n por servicios nativos en Node.js (`backend/services/automation.service.js`) para los 5 flujos empresariales (F01 a F05), con tabla de auditoría `pqrs_logs_ejecuciones`, SLAs dinámicos (2h a 48h) e idempotencia estricta por `request_id` y `operation_id`.
-2. **Componente 2 (IA Multimodal de Visión & Human-in-the-Loop):** Procesamiento de fotos de formularios físicos y novedades tomadas con celular (`backend/services/vision.service.js`), extracción estructurada JSON y activación de revisión humana cuando `score_confianza < 0.85`.
-3. **Plan B de Contingencia Local:** Degradación elegante mediante motor heurístico local que se activa ante agotamiento de cuota de IA o fallas de red, evitando caídas de servicio (HTTP 500).
-4. **Benchmark Evaluado:** Batería automatizada sobre 20 imágenes reales (`node tests/evaluar_vision_20_imagenes.js`) con 78.33% de precisión estricta global y 88.00% de confianza promedio.
-5. **Portal de Digitalización React:** Pantalla `/vision` con carga de fotos, prellenado interactivo y radicación nativa.
-
-## Tercer corte: semana 1 (documento histórico)
-
-Entrega de diseño: [PDF de dos páginas](docs/SEMANA_1_DISENO.pdf) y [fuente editable](docs/SEMANA_1_DISENO.md). Incluye inventario de los cinco flujos, elección de Ruta A, caso de visión y arquitectura propuesta. Diagnóstico del código y pendientes: [STATUS_AUDIT.md](STATUS_AUDIT.md).
-
-La vista `/semana-1`, sus enlaces desde el login y el menú, y el PDF empaquetado en `frontend/public` fueron retirados del aplicativo para la presentación. El material académico permanece únicamente en `docs/`. El estado verificado de producción está en [`docs/ESTADO_PRODUCCION_ORACLE.md`](docs/ESTADO_PRODUCCION_ORACLE.md).
-
-Archivos vigentes: `index.html` es el portal autónomo PQRS de los cortes anteriores; `frontend/index.html` inicia la plataforma React; `workflow/n8n_workflow.json` es la exportación importable en n8n. Los dos archivos de `database/` son complementarios. Para regenerar el workflow: `node workflow/build_pqrs_workflow.js`.
+Plataforma empresarial unificada para **Gestión Documental Inteligente (RAG + Visión Multimodal)** y **Mesa de Ayuda PQRS B2B** con motor propio de automatización en Node.js/Express (Ruta A), respaldo n8n + PostgreSQL 16 y **Recorrido Guiado interactivo de 5 pasos** integrado directamente en la interfaz web.
 
 ---
 
-## 🏛️ 1. Visión General de la Plataforma
+## 1. Arquitectura y Módulos del Sistema
 
-Este repositorio consolida en un único ecosistema empresarial dos módulos críticos de negocio:
-
-1. **DocuMind (Gestión Documental & RAG Inteligente):**
-   - Ingesta y clasificación automática de documentos empresariales (PDF, DOCX, TXT) con extracción inteligente de metadatos (categoría, resumen, entidad, fechas).
-   - Base de conocimiento vectorial con **Pinecone** y generación aumentada por recuperación (**RAG**) con **Google Gemini**, permitiendo comparaciones exhaustivas entre repositorios y citas directas de fuentes.
-   - Seguridad y aislamiento departamental por repositorios (Legal, Financiero, RRHH, etc.) mediante **Control de Acceso Basado en Roles (RBAC)** y tokens JWT.
-
-2. **PQRS B2B & Mesa de Ayuda Automatizada:**
-   - Portal web público de radicación ciudadana y seguimiento seguro mediante código de radicado único (`PQRS-YYYY-NNNNNN`) y token criptográfico UUIDv4.
-   - Motor de flujos en **n8n** para clasificación, cálculo dinámico de SLAs (2h a 48h según severidad), alertas por correo SMTP al solicitante y supervisores.
-   - Asignación inteligente a agentes operativos, registro de notas internas/públicas, control de versiones optimista y encuestas de satisfacción del cliente (**CSAT**).
-   - **Asistente de Solución RAG con IA:** Integración directa que permite a los agentes operativos generar diagnósticos, planes de acción y propuestas de respuesta al cliente a partir del acervo documental de la organización.
+| Módulo / Ruta | Propósito Operativo |
+|---|---|
+| **Portal Ciudadano & Tracking** (`/radicar`, y portal autónomo `index.html`) | Radicación con generación de `request_id` idempotente, política SLA automática (2h/4h/24h/48h), comprobante con `tracking_token` UUIDv4, deep-linking (`#token=...&id=...`) y encuesta CSAT de 1 a 5 estrellas. |
+| **Workspace Agentes PQRS** (`/pqrs`, y vista Agente en `index.html`) | Franja de 5 KPIs ejecutivos (`Total`, `Críticos`, `En Gestión`, `Cumplimiento SLA`, `Satisfacción CSAT`), filtros RBAC (`Todos`, `Mis Asignados`, `Mi Departamento`), gestión con concurrencia optimista (`version`), notas internas/públicas y exportación CSV neutralizada (`csvCell()`). |
+| **Visión Multimodal** (`/vision`) | Digitalización de formularios físicos y evidencias con Gemini Vision + Plan B heurístico local (`score_confianza < 0.85` activa validación Human-in-the-Loop) y radicación directa en PQRS. |
+| **Asistente RAG DocuMind** (`/chat`) | Consultas documentales con citas verificadas, comparación de contratos, circuito de falla rápido (`lastWorkingModel` + `AbortSignal.timeout(3000)` + warm-up `/api/documind/warmup`), y visión multimodal en chat. |
+| **Ingesta & Dashboard TI** (`/ingesta`, `/dashboard`) | Carga de PDF/DOCX/TXT, indexación vectorial en Pinecone / búsqueda léxica en PostgreSQL y telemetría operativa del sistema. |
+| **Automatización n8n / Express** (`/api/pqrs/*`, `/webhook/*`) | 5 flujos completos (`radicar-pqrs`, `consultar-pqrs`, `consultar-ticket`, `actualizar-ticket`, `calificar-ticket`) respaldados por 6 funciones PL/pgSQL y triggers duales en `database/init_db.sql`. |
 
 ---
 
-## 🔒 2. Seguridad, Gestión de APIs y Secretos
+## 2. Arranque Rápido y Credenciales de Prueba
 
-> [!IMPORTANT]
-> **Gestión Estricta de Credenciales y APIs:**
-> Este repositorio **no almacena claves de API ni contraseñas reales**. Toda configuración sensible se gestiona exclusivamente a través de variables de entorno locales (`.env`) o montajes de Docker Secrets (`*_FILE`), las cuales están completamente excluidas del control de versiones mediante `.gitignore`.
-
-### Variables de Entorno Requeridas (`backend/.env`):
-```env
-PORT=5000
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=pqrs_user
-DB_PASSWORD=tu_contraseña_postgres
-DB_NAME=pqrs_db
-JWT_SECRET=tu_secreto_seguro_jwt_2026
-PINECONE_API_KEY=tu_clave_pinecone
-PINECONE_INDEX=documind
-GEMINI_API_KEY=tu_clave_google_gemini
-N8N_WEBHOOK_URL=http://localhost:5678/webhook/radicar-pqrs
-TRUST_PROXY=false
-```
-
-### Variables de Entorno Frontend (`frontend/.env`):
-```env
-VITE_API_BASE_URL=http://localhost:5000/api
-```
-
----
-
-## 🏗️ 3. Arquitectura del Sistema
-
-```mermaid
-flowchart TD
-    subgraph Frontend["Frontend (React 18 + Vite + Tailwind)"]
-        UI_Rad["Portal Público PQRS"]
-        UI_Dash["Dashboard TI & Métricas"]
-        UI_RAG["Chat RAG con IA"]
-        UI_Ing["Ingesta Documental & Repos"]
-        UI_PQRS["Gestión PQRS Funcionarios"]
-    end
-
-    subgraph Backend["Backend API (Node.js + Express 4)"]
-        Auth["Auth & RBAC (JWT)"]
-        DocCtl["Controlador Documental"]
-        ChatCtl["Motor RAG & Comparación"]
-        PqrsCtl["Gestión Tickets & Asignación"]
-        Sec["Secrets Manager Seguro"]
-    end
-
-    subgraph Datos["Capa de Persistencia & Orquestación"]
-        PG[("PostgreSQL 16 (pqrs_db)")]
-        N8N["n8n Workflow Engine"]
-        PC[("Pinecone Vector DB")]
-        GEMINI["Google Gemini AI"]
-    end
-
-    Frontend -->|HTTP / REST| Backend
-    Backend --> PG
-    Backend --> PC
-    Backend --> GEMINI
-    Frontend -.->|Webhooks Radicación| N8N
-    N8N --> PG
-```
-
----
-
-## 🚀 4. Puesta en Marcha Rápida (Windows)
-
-La plataforma incluye scripts automatizados de ciclo de vida para Windows en la raíz del proyecto:
-
-### Iniciar todos los servicios:
-Haga doble clic o ejecute desde PowerShell:
-```cmd
+### Arranque del Entorno Unificado (Windows)
+```bat
 .\iniciar_documind_pqrs.bat
 ```
-El script realiza automáticamente:
-1. Verificación e inicio de **Docker Desktop**.
-2. Levantamiento de contenedores de persistencia (**PostgreSQL 16** y **n8n** en red puente).
-3. Inicialización del servidor API **Node.js** (`http://localhost:5000`).
-4. Inicialización del servidor de desarrollo **Vite** (`http://localhost:5173`).
-5. Apertura del navegador en la plataforma.
+Servicios expuestos:
+- **Aplicación Principal (React + Vite):** `http://localhost:5173` (tema Claro Empresarial `#F8FAFC` con botón **Recorrido Guiado** y selector Claro/Oscuro).
+- **Backend API REST (Express):** `http://localhost:5000/api/health`
+- **Portal Autónomo HTML:** `index.html` (compatible con `:5000` Express o simulador local `node tests/servidor_simulador.js` en `:5678`).
+- **Motor n8n & PostgreSQL 16:** `http://localhost:5678` y `localhost:5432` (`pqrs_db`).
 
-### Detener todos los servicios limpiamente:
-```cmd
-.\detener_documind_pqrs.bat
-```
-Detiene de manera ordenada los servidores Node/Vite y apaga los contenedores Docker liberando memoria RAM y puertos de red.
+### Credenciales de Evaluación
 
----
-
-## 🧪 5. Batería de Pruebas y Aseguramiento de Calidad (QA)
-
-El proyecto cuenta con una cobertura integral de pruebas automatizadas:
-
-```bash
-# Pruebas unitarias y de integración de backend:
-cd backend
-npm test
-
-# Benchmark automatizado de visión multimodal (20 imágenes con reporte estadístico):
-node ../tests/evaluar_vision_20_imagenes.js
-
-# Compilación y verificación de empaquetado de frontend:
-cd ../frontend
-npm run build
-```
+| Rol / Perfil | Correo / Usuario | Contraseña de Prueba | Acceso |
+|---|---|---|---|
+| **Administrador Global** | `admin@documind.com` | `admin2026*!` (o `password_seguro_uts`) | Plataforma completa + Dashboard TI |
+| **Administrador Docente** | `wilson.admin@documind.com` | `admin2026*!` | Plataforma completa + Dashboard TI |
+| **Agente Soporte** | `agente@documind.com` | `agente2026*!` | Bandeja PQRS, Ingesta y Chat RAG |
+| **Legal / Financiero** | `diana.legal@documind.com` / `carlos.financiero@documind.com` | `legal2026*!` / `admin2026*!` | Repositorios departamentales RBAC |
+| **Supervisor Workspace (`index.html` / Simulador)** | `andrea.silva` (`andrea.silva@techflow.co`) | `SupervisorSoporte2026*` | Workspace Agente (Supervisor Soporte) |
 
 ---
 
-## 📚 6. Documentación y Entregables Académicos
+## 3. Flujo de los 5 Pasos de Negocio (Sustentación en Vivo)
 
-Toda la documentación ejecutiva y técnica de sustentación se encuentra organizada en el directorio [`docs/`](file:///docs):
+1. **Entrada de Información:** Radicación desde `/radicar` (o plantilla rápida en `index.html`) generando `request_id` UUIDv4 para garantizar idempotencia ante reintentos.
+2. **Procesamiento y Cálculo de SLA:** Normalización de tipología/prioridad (`Crítica` 2h, `Alta`/`Reclamo` 4h, `Media` 24h, `Baja` 48h) e inserción en PostgreSQL vía `pqrs_radicar(jsonb)`.
+3. **Toma de Decisión y Acción Automática:** Detección de urgencia (`es_urgente = true`), despacho de notificaciones SMTP y entrega del comprobante con `tracking_token` privado.
+4. **Almacenamiento PostgreSQL y Workspace RBAC:** Gestión operativa desde `/pqrs` o Workspace con filtros por departamento/asignación, incremento optimista de `version` y registro en `pqrs_actividades`.
+5. **Rastreo del Cliente, CSAT e Inteligencia Documental (RAG):** Consulta pública segura (`#token=...&id=...`), calificación CSAT de 1 a 5 estrellas reflejada en KPIs y consulta/resolución asistida en `/chat` con respuesta en `< 1.5s`.
 
-| Documento | Descripción |
-| --- | --- |
-| [`DOCUMENTO_TECNICO_TERCER_CORTE.md`](file:///docs/DOCUMENTO_TECNICO_TERCER_CORTE.md) | **Documento Técnico Oficial del Tercer Corte:** Arquitectura, Ruta A, módulo de visión multimodal, benchmark y respuestas de sustentación (Máx. 10 págs). |
-| [`LIBRETO_SUSTENTACION_TERCER_CORTE.md`](file:///docs/LIBRETO_SUSTENTACION_TERCER_CORTE.md) | **Libreto Oficial de Sustentación Oral (15 Minutos):** Estructura dividida por integrantes y banco de respuestas para las 4 preguntas del docente. |
-| [`GUION_VIDEO_DEMO_TERCER_CORTE.md`](file:///docs/GUION_VIDEO_DEMO_TERCER_CORTE.md) | **Guión Oficial del Video de Demostración (8 Minutos):** Recorrido paso a paso escena por escena para grabación con OBS/Loom. |
-| [`GUIA_DESPLIEGUE_NUBE_GRATUITA.md`](file:///docs/GUIA_DESPLIEGUE_NUBE_GRATUITA.md) | **Guía Oficial de Despliegue en la Nube Gratuita:** Render, Supabase, Vercel, Dockerfile, variables de entorno y credenciales de prueba para el evaluador. |
-| [`PANEL_SUSTENTACION.html`](file:///docs/PANEL_SUSTENTACION.html) | **Panel Interactivo de Sustentación:** Dashboard visual para proyectar en clase con laboratorio de pruebas y preguntas del docente. |
-| [`REPORTE_EVALUACION_VISION_20.md`](file:///docs/REPORTE_EVALUACION_VISION_20.md) | Reporte estadístico del benchmark de 20 casos reales fotografiados con celular. |
-| [`Guia_Tercer_Corte_Desarrollo_de_Aplicaciones_Empresariales.pdf`](file:///docs/Guia_Tercer_Corte_Desarrollo_de_Aplicaciones_Empresariales.pdf) | Guía oficial del docente Wilson Castaño Galviz (26/10/2026). |
-| [`SEMANA_1_DISENO.pdf`](file:///docs/SEMANA_1_DISENO.pdf) | Documento de diseño arquitectónico y de inventario de flujos de Semana 1. |
-| [`INFORME_FINAL_ENTREGA_DOCUMIND.md`](file:///docs/INFORME_FINAL_ENTREGA_DOCUMIND.md) | Informe técnico con arquitectura, casos de uso, matriz de seguridad y métricas. |
-| [`RESUMEN_EJECUTIVO_DOCUMIND.md`](file:///docs/RESUMEN_EJECUTIVO_DOCUMIND.md) | Síntesis ejecutiva de alto impacto para evaluadores y jurados. |
-| [`PRESENTACION_DOCUMIND.md`](file:///docs/PRESENTACION_DOCUMIND.md) | Estructura diapositiva por diapositiva para la defensa y sustentación oral. |
-| [`GUION_DEMO_DOCUMIND.md`](file:///docs/GUION_DEMO_DOCUMIND.md) | Guión paso a paso para la demostración en vivo de la plataforma. |
-| [`PREGUNTAS_DEFENSA_DOCUMIND.md`](file:///docs/PREGUNTAS_DEFENSA_DOCUMIND.md) | Banco de preguntas técnicas difíciles y respuestas sustentadas sobre arquitectura, RAG y seguridad. |
-| [`MATRIZ_ACEPTACION_DOCUMIND.md`](file:///docs/MATRIZ_ACEPTACION_DOCUMIND.md) | Matriz de pruebas de aceptación UAT y criterios de calidad. |
-| [`DRP_PLAN_RECUPERACION.md`](file:///docs/DRP_PLAN_RECUPERACION.md) | Plan de contingencia, continuidad del negocio y recuperación ante desastres (DRP/HA). |
-| [`PANEL_SUSTENTACION.html`](file:///docs/PANEL_SUSTENTACION.html) | Panel interactivo de apoyo visual para la exposición en clase. |
+> El detalle interactivo de estos 5 pasos puede proyectarse directamente desde el botón **"Recorrido Guiado"** ubicado en la barra superior de la aplicación.
 
 ---
 
-## 👥 7. Autores y Créditos
+## 4. Documentación Técnica de Referencia (`docs/`)
 
-- **Desarrollador Líder:** Juan Felipe ([@JuanFe28](https://github.com/JuanFe28))
-- **Plataforma:** DocuMind & PQRS B2B
-- **Tecnologías:** Node.js, Express, React, Vite, Tailwind CSS, PostgreSQL 16, n8n, Google Gemini AI, Pinecone.
+| Documento | Contenido |
+|---|---|
+| [`docs/DOCUMENTO_TECNICO_TERCER_CORTE.md`](docs/DOCUMENTO_TECNICO_TERCER_CORTE.md) | Arquitectura Ruta A, Visión Multimodal, contratos y métricas técnicas. |
+| [`docs/REPORTE_EVALUACION_VISION_20.md`](docs/REPORTE_EVALUACION_VISION_20.md) | Benchmark sobre 20 fotografías reales con umbral Human-in-the-Loop (`0.85`). |
+| [`docs/ESTADO_PRODUCCION_ORACLE.md`](docs/ESTADO_PRODUCCION_ORACLE.md) | Estado de despliegue productivo en Oracle Cloud Always Free. |
+| [`docs/MATRIZ_ACEPTACION_DOCUMIND.md`](docs/MATRIZ_ACEPTACION_DOCUMIND.md) | Criterios de aceptación UAT y seguridad. |
+| [`STATUS_AUDIT.md`](STATUS_AUDIT.md) y [`ESTADO_ORQUESTACION.md`](ESTADO_ORQUESTACION.md) | Auditoría 360°, cierre de bugs (`BUG-001`..`BUG-005`) y registro de verificación final. |
