@@ -36,7 +36,7 @@ function KPICard({ titulo, valor, subtitulo, Icon, colorClass, bgClass }) {
   return (
     <div className="card p-5 flex items-center justify-between">
       <div>
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{titulo}</p>
+        <p className="text-xs font-semibold text-[var(--color-text-subtle)] uppercase tracking-wide">{titulo}</p>
         <p className={`text-3xl font-bold mt-1 ${colorClass}`}>{valor ?? '—'}</p>
         <p className={`text-[10px] mt-1 ${colorClass} opacity-70`}>{subtitulo}</p>
       </div>
@@ -95,20 +95,20 @@ export default function DashboardTI() {
     : '0.0';
 
   return (
-    <div id="pantalla-dashboard" className="p-8 bg-slate-50 min-h-screen w-full">
+    <div id="pantalla-dashboard" className="min-h-screen w-full bg-[var(--color-bg-main)] p-6 text-[var(--color-text)] sm:p-8">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-800">
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-[var(--color-text)]">
             <Activity className="h-5 w-5 text-indigo-600" strokeWidth={1.75} />
             Dashboard Operativo y Monitoreo de IA
           </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Visualización de métricas en tiempo real, volumetrías de archivos (MySQL) y bitácora de auditoría de IA.
+          <p className="text-[var(--color-text-muted)] text-sm mt-1">
+            Visualización de métricas en tiempo real, volumetrías de archivos (PostgreSQL) y bitácora de auditoría de IA.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
+          <label className="flex items-center gap-2 text-xs text-[var(--color-text-muted)] cursor-pointer">
             <input
               type="checkbox"
               checked={autoRefresh}
@@ -140,7 +140,7 @@ export default function DashboardTI() {
             <KPICard
               titulo="Total Archivos"
               valor={kpis?.total_archivos ?? 0}
-              subtitulo="Sincronizados en MySQL"
+              subtitulo="Sincronizados en PostgreSQL"
               Icon={Database}
               colorClass="text-indigo-700"
               bgClass="bg-indigo-50"
@@ -175,15 +175,15 @@ export default function DashboardTI() {
             {/* Gráfico de categorías */}
             <div className="card p-6">
               <div className="flex items-center justify-between mb-1">
-                <h2 className="text-lg font-bold text-slate-700">Documentos por Categoría (IA)</h2>
-                <TrendingUp className="w-4 h-4 text-slate-400" />
+                <h2 className="text-lg font-bold text-[var(--color-text)]">Documentos por Categoría (IA)</h2>
+                <TrendingUp className="w-4 h-4 text-[var(--color-text-subtle)]" />
               </div>
-              <p className="text-xs text-slate-400 mb-6">
+              <p className="text-xs text-[var(--color-text-subtle)] mb-6">
                 Clasificados automáticamente de manera inteligente por Gemini.
               </p>
 
               {categorias.length === 0 ? (
-                <div className="text-center py-8 text-slate-300">
+                <div className="text-center py-8 text-[var(--color-text-subtle)]">
                   <FileText className="w-10 h-10 mx-auto mb-2" />
                   <p className="text-sm">Sin datos de categorías aún.</p>
                 </div>
@@ -203,11 +203,11 @@ export default function DashboardTI() {
                           <span className={`font-semibold ${config.textColor}`}>
                             {cat.categoria_detectada}
                           </span>
-                          <span className="text-slate-400 text-xs">
+                          <span className="text-[var(--color-text-subtle)] text-xs">
                             {cat.cantidad} docs · {pct}%
                           </span>
                         </div>
-                        <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                        <div className="w-full bg-[var(--color-border)] h-3 rounded-full overflow-hidden">
                           <div
                             className={`${config.color} h-full rounded-full relative overflow-hidden transition-all duration-700`}
                             style={{ width: `${pct}%` }}
@@ -225,9 +225,9 @@ export default function DashboardTI() {
             {/* Consola de Logs de Auditoría */}
             <div className="card p-6 flex flex-col">
               <div className="flex items-center justify-between mb-1">
-                <h2 className="text-lg font-bold text-slate-700">Registro y Logs de Auditoría IA</h2>
+                <h2 className="text-lg font-bold text-[var(--color-text)]">Registro y Logs de Auditoría IA</h2>
               </div>
-              <p className="text-xs text-slate-400 mb-4">
+              <p className="text-xs text-[var(--color-text-subtle)] mb-4">
                 Bitácora técnica de fallas para depuración inmediata del Administrador de TI.
               </p>
 
@@ -241,7 +241,7 @@ export default function DashboardTI() {
                     className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
                       filtroSeveridad === sev
                         ? 'bg-indigo-600 text-white border-indigo-600'
-                        : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300'
+                        : 'bg-[var(--color-surface)] text-[var(--color-text-muted)] border-[var(--color-border)] hover:border-[var(--color-accent)]'
                     }`}
                   >
                     {sev}
@@ -252,7 +252,7 @@ export default function DashboardTI() {
               {/* Lista de logs */}
               <div className="max-h-[32vh] flex-1 overflow-y-auto">
                 {logsFiltrados.length === 0 ? (
-                  <div className="text-center py-8 text-slate-300">
+                  <div className="text-center py-8 text-[var(--color-text-subtle)]">
                     <Activity className="w-8 h-8 mx-auto mb-2" />
                     <p className="text-xs">Sin registros de {filtroSeveridad !== 'TODOS' ? filtroSeveridad : 'errores'}.</p>
                   </div>
@@ -260,22 +260,22 @@ export default function DashboardTI() {
                   logsFiltrados.map((log) => (
                     <div
                       key={log.id}
-                      className={`flex items-start justify-between gap-3 border-b border-slate-100/80 px-2 py-3 text-xs last:border-0 animate-fade-in ${SEVERIDAD_ROW_BG[log.severidad] || 'bg-slate-50/70'}`}
+                      className={`flex items-start justify-between gap-3 border-b border-[var(--color-border)] px-2 py-3 text-xs last:border-0 animate-fade-in ${SEVERIDAD_ROW_BG[log.severidad] || 'bg-[var(--color-bg-main)]'}`}
                     >
                       <div className="flex items-start gap-2.5 flex-1 min-w-0">
                         <span className={`${SEVERIDAD_CLASES[log.severidad] || 'log-info'} flex-shrink-0 mt-0.5`}>
                           {log.severidad}
                         </span>
                         <div className="min-w-0">
-                          <p className="font-medium text-slate-700 leading-tight truncate">{log.mensaje_error}</p>
+                          <p className="font-medium text-[var(--color-text)] leading-tight truncate">{log.mensaje_error}</p>
                           {log.nombre_archivo && (
-                            <p className="text-slate-400 text-[10px] mt-0.5 truncate">
+                            <p className="text-[var(--color-text-subtle)] text-[10px] mt-0.5 truncate">
                               Archivo: {log.nombre_archivo}
                             </p>
                           )}
                         </div>
                       </div>
-                      <span className="text-slate-400 flex-shrink-0 font-mono text-[10px]">
+                      <span className="text-[var(--color-text-subtle)] flex-shrink-0 font-mono text-[10px]">
                         {formatHora(log.creado_en)}
                       </span>
                     </div>

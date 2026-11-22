@@ -74,14 +74,17 @@ function getTransporter() {
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
 
-  if (host && user && pass) {
-    transporter = nodemailer.createTransport({
+  if (host) {
+    const config = {
       host,
       port,
       secure: port === 465,
-      auth: { user, pass },
       tls: { rejectUnauthorized: process.env.NODE_ENV === 'production' },
-    });
+    };
+    if (user && pass) {
+      config.auth = { user, pass };
+    }
+    transporter = nodemailer.createTransport(config);
   }
   return transporter;
 }

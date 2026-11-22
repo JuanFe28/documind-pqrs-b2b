@@ -280,7 +280,7 @@ export default function IngestaDocumental({ selectedRepo, onRepoSelect }) {
   };
 
   const handleEliminar = async (doc) => {
-    if (!window.confirm(`¿Eliminar "${doc.nombre_archivo}" de MySQL y Pinecone?`)) return;
+    if (!window.confirm(`¿Eliminar "${doc.nombre_archivo}" de PostgreSQL y Pinecone?`)) return;
     setEliminando(doc.id);
     try {
       await documentsAPI.delete(doc.id);

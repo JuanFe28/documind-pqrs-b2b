@@ -12,7 +12,6 @@ import {
   Gauge,
   Inbox,
   LifeBuoy,
-  LogOut,
   Lock,
   MessageSquare,
   RefreshCw,
@@ -23,7 +22,6 @@ import {
   X,
 } from 'lucide-react';
 import { pqrsAPI } from '../services/api';
-import { useAuth } from '../context/AuthContext';
 import {
   csvCell,
   estadoSla,
@@ -118,7 +116,6 @@ function BotonCopiar({ ticketId, copiado, onCopiar, compacto = false }) {
 
 export default function GestionPqrs() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
 
   const [tickets, setTickets] = useState([]);
   const [kpis, setKpis] = useState(null);
@@ -368,11 +365,6 @@ export default function GestionPqrs() {
     );
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
   const total = Number(kpis?.total_tickets ?? 0);
   const criticos = Number(kpis?.criticos_pendientes ?? 0);
   const activos = Number(kpis?.tickets_abiertos ?? 0);
@@ -420,15 +412,6 @@ export default function GestionPqrs() {
           >
             <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
             {exportando ? 'Exportando' : 'Exportar CSV'}
-          </button>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium text-slate-500 transition-colors hover:bg-rose-50 hover:text-rose-600 active:scale-[0.98]"
-            title={user?.nombre ? `Cerrar sesión de ${user.nombre}` : 'Cerrar sesión'}
-          >
-            <LogOut className="h-3.5 w-3.5" strokeWidth={1.75} />
-            Cerrar sesión
           </button>
         </div>
       </header>
@@ -567,29 +550,29 @@ export default function GestionPqrs() {
         className="mt-6 overflow-hidden rounded-2xl border border-slate-900/[0.06] bg-white shadow-sm"
       >
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1080px] border-collapse text-left">
+          <table className="w-full min-w-[780px] border-collapse text-left xl:min-w-0">
             <thead>
               <tr className="border-b border-slate-900/[0.06] bg-slate-50/70 text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-500">
-                <th className="px-4 py-3">Radicado</th>
-                <th className="px-4 py-3">Solicitante</th>
-                <th className="px-4 py-3">Asunto / Tipo</th>
-                <th className="px-4 py-3">Prioridad</th>
-                <th className="px-4 py-3">Estado</th>
-                <th className="px-4 py-3">SLA</th>
-                <th className="px-4 py-3">Documentos</th>
-                <th className="px-4 py-3 text-right">Acción</th>
+                <th className="px-2.5 py-2.5">Radicado</th>
+                <th className="px-2.5 py-2.5">Solicitante</th>
+                <th className="px-2.5 py-2.5">Asunto / Tipo</th>
+                <th className="px-2.5 py-2.5">Prioridad</th>
+                <th className="px-2.5 py-2.5">Estado</th>
+                <th className="px-2.5 py-2.5">SLA</th>
+                <th className="px-2.5 py-2.5">Docs</th>
+                <th className="px-2.5 py-2.5 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-900/[0.06] text-[13px]">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                  <td colSpan={8} className="px-3 py-12 text-center text-slate-400">
                     Cargando solicitudes...
                   </td>
                 </tr>
               ) : tickets.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center">
+                  <td colSpan={8} className="px-3 py-12 text-center">
                     <FileText className="mx-auto h-7 w-7 text-slate-300" strokeWidth={1.75} />
                     <p className="mt-2 text-slate-500">No se encontraron solicitudes con los filtros aplicados.</p>
                   </td>
@@ -604,7 +587,7 @@ export default function GestionPqrs() {
                       key={ticket.id ?? ticket.ticket_id}
                       className="h-[52px] min-h-[52px] transition-colors hover:bg-slate-50/70"
                     >
-                      <td className="px-4 py-2.5">
+                      <td className="px-2.5 py-2.5">
                         <div className="flex items-center gap-1.5">
                           <span className="whitespace-nowrap font-mono text-[12px] font-semibold text-slate-700 tabular-nums">
                             {ticket.ticket_id}
@@ -616,19 +599,19 @@ export default function GestionPqrs() {
                           />
                         </div>
                       </td>
-                      <td className="px-4 py-2.5">
-                        <p className="max-w-[190px] truncate font-medium text-slate-800">
+                      <td className="px-2.5 py-2.5">
+                        <p className="max-w-[135px] truncate font-medium text-slate-800">
                           {ticket.nombre}
                         </p>
-                        <p className="max-w-[190px] truncate text-[11px] text-slate-400">
+                        <p className="max-w-[135px] truncate text-[11px] text-slate-400">
                           {ticket.email}
                         </p>
                       </td>
-                      <td className="px-4 py-2.5">
-                        <p className="max-w-[280px] truncate text-slate-800">{ticket.asunto}</p>
-                        <p className="text-[11px] text-slate-400">{ticket.tipo}</p>
+                      <td className="px-2.5 py-2.5">
+                        <p className="max-w-[165px] truncate text-slate-800">{ticket.asunto}</p>
+                        <p className="max-w-[165px] truncate text-[11px] text-slate-400">{ticket.tipo}</p>
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-2.5 py-2.5">
                         <span
                           className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                             PRIORIDAD_STYLES[prioridadKey] || 'bg-slate-100 text-slate-600'
@@ -637,7 +620,7 @@ export default function GestionPqrs() {
                           {formatPrioridadLabel(ticket.prioridad)}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-2.5 py-2.5">
                         <span
                           className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                             ESTADO_STYLES[estadoKey] || 'bg-slate-100 text-slate-600'
@@ -647,7 +630,7 @@ export default function GestionPqrs() {
                           {formatEstadoLabel(ticket.estado)}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-2.5 py-2.5">
                         <p
                           className={`whitespace-nowrap text-[12px] font-semibold tabular-nums ${
                             SLA_TONES[sla.tone] || SLA_TONES.neutral
@@ -657,7 +640,7 @@ export default function GestionPqrs() {
                         </p>
                         <p className="text-[10px] text-slate-400">{sla.detalle}</p>
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-2.5 py-2.5">
                         {Number(ticket.total_documentos) > 0 ? (
                           <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-slate-600">
                             <FileStack className="h-3.5 w-3.5 text-indigo-500" strokeWidth={1.75} />
@@ -667,13 +650,13 @@ export default function GestionPqrs() {
                           <span className="text-[12px] text-slate-300">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-2.5 text-right">
+                      <td className="px-2.5 py-2.5 text-right">
                         <button
                           type="button"
                           onClick={() => abrirDetalle(ticket)}
-                          className="inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-[12px] font-semibold text-indigo-600 transition-colors hover:bg-indigo-50 hover:text-indigo-700 active:scale-[0.98]"
+                          className="inline-flex h-8 items-center gap-1 whitespace-nowrap rounded-lg px-2 text-[12px] font-semibold text-indigo-600 transition-colors hover:bg-indigo-50 hover:text-indigo-700 active:scale-[0.98]"
                         >
-                          Abrir
+                          Ver detalle
                           <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} />
                         </button>
                       </td>

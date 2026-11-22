@@ -73,6 +73,12 @@ export const visionAPI = {
     api.post('/vision/procesar-formulario', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  indexarDocumento: (data) =>
+    data instanceof FormData
+      ? api.post('/vision/indexar-documento', data, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+      : api.post('/vision/indexar-documento', data),
 };
 
 // ─── Automatización Nativa PQRS (Ruta A) ──────────────────────────────────────

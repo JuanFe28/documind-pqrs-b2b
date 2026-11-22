@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -15,6 +17,8 @@ import {
   Trash2,
   AlertCircle,
   Filter,
+  PanelLeftClose,
+  PanelLeftOpen,
   Paperclip,
   Plus,
   MessageCircle,
@@ -101,6 +105,85 @@ function TypingIndicator({ estado, enCola = 0 }) {
           ) : null}
         </div>
       </div>
+    </div>
+  );
+}
+
+function MarkdownRespuesta({ contenido }) {
+  if (!contenido) return null;
+  return (
+    <div className="space-y-2.5 text-sm leading-relaxed text-[var(--color-text)]">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          h1: ({ children }) => (
+            <h1 className="mt-3 text-base font-bold text-[var(--color-text)] first:mt-0">{children}</h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="mt-3 text-[15px] font-bold text-[var(--color-text)] first:mt-0">{children}</h2>
+          ),
+          h3: ({ children }) => (
+            <h3 className="mt-2.5 text-sm font-bold text-[var(--color-text)] first:mt-0">{children}</h3>
+          ),
+          h4: ({ children }) => (
+            <h4 className="mt-2 text-xs font-bold uppercase tracking-wide text-[var(--color-text-muted)]">{children}</h4>
+          ),
+          p: ({ children }) => <p className="leading-relaxed text-[var(--color-text)]">{children}</p>,
+          strong: ({ children }) => <strong className="font-semibold text-[var(--color-text)]">{children}</strong>,
+          em: ({ children }) => <em className="italic text-[var(--color-text-muted)]">{children}</em>,
+          ul: ({ children }) => <ul className="list-disc space-y-1 pl-5 text-[var(--color-text)]">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal space-y-1 pl-5 text-[var(--color-text)]">{children}</ol>,
+          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+          blockquote: ({ children }) => (
+            <blockquote className="rounded-r-lg border-l-2 border-[var(--color-accent)] bg-[var(--color-bg-main)] px-3 py-2 text-xs italic text-[var(--color-text-muted)]">
+              {children}
+            </blockquote>
+          ),
+          code: ({ inline, className, children, ...props }) =>
+            inline ? (
+              <code
+                className="rounded border border-[var(--color-border)] bg-[var(--color-bg-main)] px-1.5 py-0.5 font-mono text-[12px] text-[var(--color-accent)]"
+                {...props}
+              >
+                {children}
+              </code>
+            ) : (
+              <pre className="overflow-x-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-main)] p-3 font-mono text-xs text-[var(--color-text)]">
+                <code className={className} {...props}>
+                  {children}
+                </code>
+              </pre>
+            ),
+          table: ({ children }) => (
+            <div className="my-2 overflow-x-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)]">
+              <table className="w-full border-collapse text-left text-xs">{children}</table>
+            </div>
+          ),
+          thead: ({ children }) => (
+            <thead className="border-b border-[var(--color-border)] bg-[var(--color-surface)] text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+              {children}
+            </thead>
+          ),
+          th: ({ children }) => <th className="px-3 py-2 font-semibold">{children}</th>,
+          td: ({ children }) => (
+            <td className="border-t border-[var(--color-border)] px-3 py-2 align-top text-[var(--color-text)]">
+              {children}
+            </td>
+          ),
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-[var(--color-accent)] underline hover:opacity-80"
+            >
+              {children}
+            </a>
+          ),
+        }}
+      >
+        {contenido}
+      </ReactMarkdown>
     </div>
   );
 }
@@ -222,9 +305,7 @@ function MensajeIA({
           )}
         </div>
 
-        <div className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text)]">
-          {respuesta}
-        </div>
+        <MarkdownRespuesta contenido={respuesta} />
 
         {borrador_respuesta ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -462,8 +543,9 @@ function BannerExpediente({ ticketId, contexto, onVolver, onDesvincular }) {
 }
 
 const MENSAJE_BIENVENIDA = {
+  esBienvenida: true,
   tipo: 'ia',
-  respuesta: `Hola. Soy **DocuMind**, tu asistente conversacional con inteligencia documental y **visión multimodal**.\n\nPuedo responder preguntas, comparar contratos, resolver dudas normativas y **procesar imágenes de formularios físicos o evidencias de novedades** directamente desde esta conversación.\n\nPrueba:\n\n• **Visión Multimodal:** Adjunta la foto de un formulario físico o novedad con el botón de cámara y extraeré los campos con opción de radicación inmediata en PQRS.\n• **Comparación:** *"Compara el contrato de outsourcing IT con el de soporte hosting"*\n• **Resolución PQRS:** *"¿Cómo resolver un requerimiento de facturación duplicada según los manuales?"*\n\n*Nota: Respondo con citas a documentos y datos estructurados verificados.*`,
+  respuesta: `Hola. Soy **DocuMind**, tu asistente conversacional con inteligencia documental y **visión multimodal**.\n\nPuedo responder preguntas, comparar contratos, resolver dudas normativas y **procesar imágenes de formularios físicos o evidencias de novedades** directamente desde esta conversación.\n\nPrueba:\n\n- **Visión Multimodal:** Adjunta la foto de un formulario físico o novedad con el botón de cámara y extraeré los campos con opción de radicación inmediata en PQRS.\n- **Comparación:** *"Compara el contrato de outsourcing IT con el de soporte hosting"*\n- **Resolución PQRS:** *"¿Cómo resolver un requerimiento de facturación duplicada según los manuales?"*\n\n*Nota: Respondo con citas a documentos y datos estructurados verificados.*`,
   fuentes: [],
 };
 
@@ -497,11 +579,14 @@ export default function ChatRAG({ selectedRepo }) {
   const [threads, setThreads] = useState([]);
   const [activeThreadId, setActiveThreadId] = useState(null);
   const [loadingThreads, setLoadingThreads] = useState(false);
+  const [historialAbierto, setHistorialAbierto] = useState(true);
 
   // Soporte para visión multimodal en chat
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState(null);
   const fileInputRef = useRef(null);
+  const objectUrlsRef = useRef([]);
+  const prevSelectedRepoRef = useRef(selectedRepo);
 
   const handleImageSelect = (e) => {
     const file = e.target.files?.[0];
@@ -510,18 +595,34 @@ export default function ChatRAG({ selectedRepo }) {
       setError('La imagen excede el límite de 15 MB.');
       return;
     }
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+      objectUrlsRef.current = objectUrlsRef.current.filter((u) => u !== imagePreviewUrl);
+    }
     setSelectedImage(file);
     const url = URL.createObjectURL(file);
+    objectUrlsRef.current.push(url);
     setImagePreviewUrl(url);
     setError('');
   };
 
   const handleRemoveImage = () => {
-    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+      objectUrlsRef.current = objectUrlsRef.current.filter((u) => u !== imagePreviewUrl);
+    }
     setSelectedImage(null);
     setImagePreviewUrl(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  useEffect(
+    () => () => {
+      objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      objectUrlsRef.current = [];
+    },
+    []
+  );
 
   useEffect(() => {
     activeThreadIdRef.current = activeThreadId;
@@ -676,7 +777,10 @@ export default function ChatRAG({ selectedRepo }) {
   useEffect(() => {
     if (selectedRepo) {
       setFiltroRepoId(String(selectedRepo.id));
+    } else if (prevSelectedRepoRef.current) {
+      setFiltroRepoId('');
     }
+    prevSelectedRepoRef.current = selectedRepo;
   }, [selectedRepo]);
 
   // Cargar threads
@@ -769,6 +873,7 @@ export default function ChatRAG({ selectedRepo }) {
         const formData = new FormData();
         formData.append('archivo', item.image);
         formData.append('query', item.query || '');
+        if (item.repoId) formData.append('repositorio_id', String(item.repoId));
         if (currentThreadId) formData.append('thread_id', currentThreadId);
 
         const res = await chatAPI.queryMultimodal(formData);
@@ -850,14 +955,21 @@ export default function ChatRAG({ selectedRepo }) {
     if (fileInputRef.current) fileInputRef.current.value = '';
     setError('');
 
-    setMensajes((prev) => [
-      ...prev,
-      {
-        tipo: 'usuario',
-        texto: query || 'Foto de formulario físico o evidencia adjunta para digitalización',
-        imagen: currentPreview,
-      },
-    ]);
+    const mensajeOptimista = {
+      id: `user-${Date.now()}-${Math.round(Math.random() * 1e6)}`,
+      tipo: 'usuario',
+      texto: query || 'Foto de formulario físico o evidencia adjunta para digitalización',
+      imagen: currentPreview,
+    };
+
+    // Optimistic UI (0 ms): retira el mensaje de bienvenida y muestra burbuja e indicador al instante
+    setMensajes((prev) => [...prev.filter((m) => !m.esBienvenida), mensajeOptimista]);
+    setLoading(true);
+    if (!procesandoRef.current) {
+      setEstadoEnvio(
+        currentImage ? 'Analizando imagen con visión multimodal...' : 'Buscando evidencia documental...'
+      );
+    }
 
     const effectiveRepoId = overrideRepoId !== null
       ? overrideRepoId
@@ -936,6 +1048,8 @@ export default function ChatRAG({ selectedRepo }) {
     colaRef.current = [];
     setColaPendiente([]);
     setActiveThreadId(null);
+    objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    objectUrlsRef.current = [];
     setMensajes([MENSAJE_BIENVENIDA]);
     setError('');
   };
@@ -965,58 +1079,88 @@ export default function ChatRAG({ selectedRepo }) {
   ];
 
   return (
-    <div className="flex h-[calc(100dvh-56px)] min-h-0 w-full overflow-hidden bg-[var(--color-bg-main)]">
+    <div className="relative flex h-[calc(100dvh-56px)] min-h-0 w-full overflow-hidden bg-[var(--color-bg-main)]">
       
-      {/* Sidebar Historial */}
-      <div className="hidden w-64 flex-shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] md:flex">
-        <div className="flex items-center justify-between border-b border-[var(--color-border)] p-4">
-          <h2 className="text-sm font-bold text-[var(--color-text)]">Historial de Chat</h2>
-          <button 
-            onClick={limpiarChat}
-            className="rounded-lg p-1.5 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-bg-main)] hover:text-[var(--color-text)] active:scale-[0.98]"
-            title="Nuevo Chat"
-          >
-            <Plus className="h-4 w-4" strokeWidth={1.75} />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
-          {loadingThreads ? (
-            <div className="flex justify-center p-4"><Loader2 className="h-4 w-4 animate-spin text-[var(--color-text-subtle)]" strokeWidth={1.75} /></div>
-          ) : threads.length === 0 ? (
-            <p className="p-4 text-center text-xs text-[var(--color-text-subtle)]">No hay conversaciones previas</p>
-          ) : (
-            threads.map(t => (
-              <div
-                key={t.id}
-                className={`group flex w-full cursor-pointer items-center gap-2 rounded-lg p-2.5 text-left text-xs transition-colors ${activeThreadId === t.id ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]' : 'text-[var(--color-text-muted)] hover:bg-[var(--color-bg-main)] hover:text-[var(--color-text)]'}`}
-                onClick={() => setActiveThreadId(t.id)}
+      {/* Sidebar Historial Colapsable */}
+      {historialAbierto && (
+        <div className="fixed inset-y-[56px] left-0 z-20 flex w-64 flex-shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg md:static md:inset-auto md:z-auto md:shadow-none">
+          <div className="flex items-center justify-between border-b border-[var(--color-border)] p-4">
+            <h2 className="text-sm font-bold text-[var(--color-text)]">Historial de Chat</h2>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={limpiarChat}
+                className="rounded-lg p-1.5 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-bg-main)] hover:text-[var(--color-text)] active:scale-[0.98]"
+                title="Nuevo Chat"
               >
-                <MessageCircle className={`h-3.5 w-3.5 flex-shrink-0 ${activeThreadId === t.id ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-subtle)]'}`} strokeWidth={1.75} />
-                <span className={`flex-1 truncate ${activeThreadId === t.id ? 'font-semibold' : ''}`}>{t.titulo}</span>
-                <button
-                  onClick={(e) => handleDeleteThread(e, t.id)}
-                  className="flex-shrink-0 rounded p-0.5 text-[var(--color-text-subtle)] opacity-0 transition-all hover:bg-rose-500/10 hover:text-[var(--color-danger)] group-hover:opacity-100"
-                  title="Eliminar conversación"
+                <Plus className="h-4 w-4" strokeWidth={1.75} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistorialAbierto(false)}
+                className="rounded-lg p-1.5 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-bg-main)] hover:text-[var(--color-text)] md:hidden"
+                title="Ocultar historial"
+                aria-label="Ocultar historial"
+              >
+                <X className="h-4 w-4" strokeWidth={1.75} />
+              </button>
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
+            {loadingThreads ? (
+              <div className="flex justify-center p-4"><Loader2 className="h-4 w-4 animate-spin text-[var(--color-text-subtle)]" strokeWidth={1.75} /></div>
+            ) : threads.length === 0 ? (
+              <p className="p-4 text-center text-xs text-[var(--color-text-subtle)]">No hay conversaciones previas</p>
+            ) : (
+              threads.map(t => (
+                <div
+                  key={t.id}
+                  className={`group flex w-full cursor-pointer items-center gap-2 rounded-lg p-2.5 text-left text-xs transition-colors ${activeThreadId === t.id ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]' : 'text-[var(--color-text-muted)] hover:bg-[var(--color-bg-main)] hover:text-[var(--color-text)]'}`}
+                  onClick={() => setActiveThreadId(t.id)}
                 >
-                  <Trash2 className="h-3 w-3" strokeWidth={1.75} />
-                </button>
-              </div>
-            ))
-          )}
+                  <MessageCircle className={`h-3.5 w-3.5 flex-shrink-0 ${activeThreadId === t.id ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-subtle)]'}`} strokeWidth={1.75} />
+                  <span className={`flex-1 truncate ${activeThreadId === t.id ? 'font-semibold' : ''}`}>{t.titulo}</span>
+                  <button
+                    onClick={(e) => handleDeleteThread(e, t.id)}
+                    className="flex-shrink-0 rounded p-0.5 text-[var(--color-text-subtle)] opacity-0 transition-all hover:bg-rose-500/10 hover:text-[var(--color-danger)] group-hover:opacity-100"
+                    title="Eliminar conversación"
+                  >
+                    <Trash2 className="h-3 w-3" strokeWidth={1.75} />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       <div id="pantalla-chat" className="flex h-full min-w-0 flex-1 flex-col">
         {/* Header del chat */}
         <div className="flex flex-shrink-0 flex-col gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <div className="min-w-0">
-            <h1 className="flex items-center gap-2 text-lg font-bold tracking-tight text-[var(--color-text)] sm:text-xl">
-              <MessageSquare className="h-5 w-5 shrink-0 text-[var(--color-accent)]" strokeWidth={1.75} />
-              <span className="truncate">Chat Conversacional RAG Inteligente</span>
-            </h1>
-            <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">
-              Consultas en lenguaje natural con citas y trazabilidad documental
-            </p>
+          <div className="flex min-w-0 items-start gap-3">
+            <button
+              type="button"
+              id="btn-toggle-historial"
+              onClick={() => setHistorialAbierto((prev) => !prev)}
+              aria-expanded={historialAbierto}
+              aria-label={historialAbierto ? 'Ocultar historial de chat' : 'Mostrar historial de chat'}
+              title={historialAbierto ? 'Ocultar historial de chat' : 'Mostrar historial de chat'}
+              className="mt-0.5 inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-main)] text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)] active:scale-[0.98]"
+            >
+              {historialAbierto ? (
+                <PanelLeftClose className="h-4 w-4" strokeWidth={1.75} />
+              ) : (
+                <PanelLeftOpen className="h-4 w-4" strokeWidth={1.75} />
+              )}
+            </button>
+            <div className="min-w-0">
+              <h1 className="flex items-center gap-2 text-lg font-bold tracking-tight text-[var(--color-text)] sm:text-xl">
+                <MessageSquare className="h-5 w-5 shrink-0 text-[var(--color-accent)]" strokeWidth={1.75} />
+                <span className="truncate">Chat Conversacional RAG Inteligente</span>
+              </h1>
+              <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">
+                Consultas en lenguaje natural con citas y trazabilidad documental
+              </p>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {/* Selector de Repositorio en Chat */}
@@ -1089,8 +1233,8 @@ export default function ChatRAG({ selectedRepo }) {
           <div ref={chatEndRef} />
         </div>
 
-        {/* Sugerencias rápidas (cuando hay pocos mensajes) */}
-        {mensajes.length <= 1 && !loading && colaPendiente.length === 0 && (
+        {/* Sugerencias rápidas (cuando está visible el mensaje inicial) */}
+        {mensajes.some((m) => m.esBienvenida) && !loading && colaPendiente.length === 0 && (
           <div className="flex-shrink-0 px-4 pb-4 sm:px-6 lg:px-8">
             <div className="flex flex-wrap gap-2">
               {preguntasRapidas.map((p, i) => (

@@ -58,7 +58,7 @@ export default function Sidebar({ onRepoSelect, selectedRepo, mobileOpen = false
       setRepositorios(repos);
       if (repos.length > 0 && onRepoSelect) {
         if (!selectedRepo || !repos.some((r) => r.id === selectedRepo.id)) {
-          onRepoSelect(repos[0]);
+          onRepoSelect(repos[0], { auto: true });
         }
       }
     } catch {
@@ -253,7 +253,10 @@ export default function Sidebar({ onRepoSelect, selectedRepo, mobileOpen = false
                             key={repo.id}
                             type="button"
                             id={`repo-${repo.id}`}
-                            onClick={() => onRepoSelect?.(activo ? null : repo)}
+                            onClick={() => {
+                              onRepoSelect?.(activo ? null : repo);
+                              onMobileClose?.();
+                            }}
                             className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors active:scale-[0.98] ${
                               activo
                                 ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]'

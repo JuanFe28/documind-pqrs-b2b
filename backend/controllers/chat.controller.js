@@ -1080,12 +1080,13 @@ export async function eliminarThread(req, res) {
  * estructurada y habilitando el disparo directo a radicación PQRS.
  */
 export async function consultarChatConImagen(req, res) {
+  const inicioConsulta = Date.now();
   try {
     if (!req.file) {
       return res.status(400).json({ ok: false, mensaje: 'Debe adjuntar una imagen o formulario escaneado.' });
     }
 
-    const { query, thread_id } = req.body;
+    const { query, thread_id, repositorio_id } = req.body;
     const usuarioId = req.user?.email || req.user?.nombre || 'USUARIO_CHAT';
     const file = req.file;
     const fileBuffer = fs.readFileSync(file.path);
@@ -1167,6 +1168,9 @@ export async function consultarChatConImagen(req, res) {
       ok: true,
       respuesta: respuestaTexto,
       fuentes_citadas: [],
+      latencia_ms: Date.now() - inicioConsulta,
+      modelo_usado: resultadoVision.modelo_utilizado,
+      repositorio_id: repositorio_id ? Number(repositorio_id) || null : null,
       datos_vision: {
         ...resultadoVision,
         archivo: {

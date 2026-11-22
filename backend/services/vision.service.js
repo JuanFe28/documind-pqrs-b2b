@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
+import pdfParse from 'pdf-parse';
 import {
   isGeminiConfigured,
   getLastWorkingModel,
@@ -448,5 +449,360 @@ Reglas estrictas:
     });
 
     return planB;
+  }
+}
+
+const TIPOS_DOCUMENTO_BOVEDA = [
+  'Contrato',
+  'Factura',
+  'Documento de Identidad',
+  'Acta',
+  'Normativa',
+  'Soporte General',
+];
+
+function esArchivoTextoGeneral(mimeType, nombreArchivo) {
+  const mime = String(mimeType || '').toLowerCase();
+  const nombre = String(nombreArchivo || '').toLowerCase();
+  return mime.startsWith('text/') ||
+    mime.includes('json') ||
+    mime.includes('xml') ||
+    /\.(txt|md|csv|log|json|xml|html?)$/i.test(nombre);
+}
+
+function esArchivoPdfGeneral(mimeType, nombreArchivo) {
+  const mime = String(mimeType || '').toLowerCase();
+  return mime === 'application/pdf' || /\.pdf$/i.test(String(nombreArchivo || ''));
+}
+
+function extraerTextoImprimibleGeneral(buffer) {
+  const raw = buffer.toString('latin1');
+  const fragmentos = [];
+  const patronTj = /\((.{2,}?)\)\s*Tj/g;
+  let coincidencia;
+
+  while ((coincidencia = patronTj.exec(raw)) !== null) {
+    const fragmento = coincidencia[1]
+      .replace(/\\([()\\])/g, '$1')
+      .replace(/\\n/g, '\n')
+      .replace(/\\r/g, '')
+      .trim();
+    if (fragmento) fragmentos.push(fragmento);
+  }
+
+  if (fragmentos.length > 0) return fragmentos.join('\n');
+
+  const bloques = raw.match(/[\x20-\x7E\u00A0-\u00FF\r\n\t]{12,}/g) || [];
+  return bloques
+    .map((bloque) => bloque
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim())
+    .filter((bloque) => {
+      if (bloque.length < 12) return false;
+      const imprimibles = bloque.replace(/[^\x20-\x7E\u00A0-\u00FF]/g, '').length;
+      return imprimibles / bloque.length >= 0.85;
+    })
+    .join('\n')
+    .trim();
+}
+
+async function extraerTextoDocumentoGeneral(buffer, mimeType, nombreArchivo) {
+  if (esArchivoTextoGeneral(mimeType, nombreArchivo)) {
+    return buffer.toString('utf8').replace(/\u0000/g, ' ').trim();
+  }
+
+  if (esArchivoPdfGeneral(mimeType, nombreArchivo)) {
+    try {
+      const data = await pdfParse(buffer);
+      if (data && typeof data.text === 'string' && data.text.trim()) {
+        return data.text.replace(/\u0000/g, ' ').trim();
+      }
+    } catch (error) {
+      console.warn('[Vision Service] pdfParse no pudo extraer texto del PDF:', error.message);
+    }
+    return extraerTextoImprimibleGeneral(buffer);
+  }
+
+  return '';
+}
+
+function inferirTipoDocumentoGeneral(texto, nombreArchivo = '') {
+  const contenido = `${nombreArchivo}\n${texto}`.toLowerCase();
+  if (/c[eé]dula|documento de identidad|pasaporte|tarjeta de identidad/.test(contenido)) return 'Documento de Identidad';
+  if (/contrato|convenio|cl[aá]usula|acuerdo de voluntades/.test(contenido)) return 'Contrato';
+  if (/factura|cuenta de cobro|\bnit\b|subtotal|\biva\b/.test(contenido)) return 'Factura';
+  if (/\bacta\b|reuni[oó]n|sesi[oó]n/.test(contenido)) return 'Acta';
+  if (/normativa|decreto|resoluci[oó]n|ley\s+\d|circular/.test(contenido)) return 'Normativa';
+  return 'Soporte General';
+}
+
+function normalizarTipoDocumentoGeneral(valor, texto, nombreArchivo = '') {
+  const candidato = String(valor || '').trim().toLowerCase();
+  const encontrado = TIPOS_DOCUMENTO_BOVEDA.find((tipo) => tipo.toLowerCase() === candidato);
+  if (encontrado) return encontrado;
+  return inferirTipoDocumentoGeneral(texto, nombreArchivo);
+}
+
+function extraerTituloSugeridoGeneral(texto, nombreArchivo) {
+  const lineas = String(texto || '')
+    .split(/\r?\n/)
+    .map((linea) => linea.replace(/\s+/g, ' ').trim())
+    .filter((linea) => linea.length >= 6);
+
+  if (lineas.length > 0) return lineas[0].slice(0, 160);
+
+  const base = String(nombreArchivo || 'Documento digitalizado')
+    .replace(/\.[^.]+$/, '')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+  return base ? `Documento: ${base}`.slice(0, 160) : 'Documento digitalizado';
+}
+
+function extraerEntidadesClaveGeneral(texto, nombreArchivo = '') {
+  const contenido = String(texto || '');
+  const lineas = contenido
+    .split(/\r?\n/)
+    .map((linea) => linea.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+
+  const buscarLinea = (patron) => {
+    for (const linea of lineas) {
+      const coincidencia = linea.match(patron);
+      if (coincidencia && coincidencia[1]) return coincidencia[1].trim().slice(0, 160);
+    }
+    return null;
+  };
+
+  const documento = contenido.match(
+    /\b(?:nit|documento(?:\s+de\s+identidad)?|c[eé]dula|identificaci[oó]n)\b[^\d]{0,20}([\d.\-]{5,20})/i
+  );
+  const fecha = contenido.match(/\b(\d{4}-\d{2}-\d{2}|\d{2}[\/.-]\d{2}[\/.-]\d{4})\b/);
+  const monto = contenido.match(/(?:total|monto|valor)\b[^\d$]{0,15}\$?\s*([\d.,]{3,})/i);
+
+  return {
+    emisor: buscarLinea(/^(?:emisor|remitente|proveedor|empresa|de)\s*[:\-]\s*(.+)$/i) ||
+      (lineas[0] ? lineas[0].slice(0, 160) : null),
+    receptor: buscarLinea(/^(?:receptor|destinatario|cliente|para|se[ñn]or(?:a)?)\s*[:\-]\s*(.+)$/i) ||
+      (lineas[1] ? lineas[1].slice(0, 160) : null),
+    documento_id_o_nit: documento ? documento[1] : null,
+    fecha_documento: fecha ? fecha[1] : null,
+    monto_total: monto ? monto[1] : null,
+  };
+}
+
+function construirResumenLocalGeneral(texto, nombreArchivo) {
+  const frases = String(texto || '')
+    .split(/\r?\n|(?<=[.!?])\s+/)
+    .map((linea) => linea.replace(/\s+/g, ' ').trim())
+    .filter((linea) => linea.length >= 20);
+
+  const base = frases.slice(0, 3).join('. ').replace(/\.+$/, '');
+  if (base) {
+    return `${base.slice(0, 700)}. Documento incorporado a la Bóveda Documental para consulta, búsqueda semántica y trazabilidad.`;
+  }
+
+  return `Documento "${nombreArchivo || 'sin nombre'}" digitalizado hacia la Bóveda Documental. El motor de visión no está disponible y no se pudo transcribir el contenido completo del archivo. El original se conserva para revisión y auditoría humana.`;
+}
+
+function normalizarScoreConfianzaGeneral(valor) {
+  let score = Number(valor);
+  if (!Number.isFinite(score)) score = 0.75;
+  if (score > 1 && score <= 100) score = score / 100;
+  return Math.max(0, Math.min(1, Number(score.toFixed(2))));
+}
+
+async function ejecutarPlanBDocumentoGeneral(fileBuffer, mimeType, nombreArchivo, usuarioId, motivo) {
+  const inicioMs = Date.now();
+  const textoExtraido = await extraerTextoDocumentoGeneral(fileBuffer, mimeType, nombreArchivo);
+  const textoOcr = textoExtraido.slice(0, 20000);
+  const tieneTexto = textoOcr.replace(/\s+/g, '').length >= 40;
+
+  const advertencias = [
+    'El modelo de visión en la nube no está disponible; se activó el Plan B local de contingencia.',
+  ];
+  if (tieneTexto) {
+    advertencias.push('Texto extraído localmente sin análisis semántico del modelo; valida el tipo de documento y las entidades clave.');
+  } else {
+    advertencias.push('No fue posible extraer texto legible del archivo; se generó un resumen base que requiere revisión humana.');
+  }
+  if (motivo) advertencias.push(`Detalle técnico: ${String(motivo).slice(0, 180)}`);
+
+  const resultado = {
+    modelo_utilizado: 'Plan B (Extractor Local de Documentos)',
+    es_plan_b: true,
+    score_confianza: tieneTexto ? 0.68 : 0.55,
+    requiere_revision_humana: true,
+    advertencias,
+    datos_documento: {
+      titulo_sugerido: extraerTituloSugeridoGeneral(textoOcr, nombreArchivo),
+      tipo_documento: inferirTipoDocumentoGeneral(textoOcr, nombreArchivo),
+      entidades_clave: extraerEntidadesClaveGeneral(textoOcr, nombreArchivo),
+      resumen_ejecutivo: construirResumenLocalGeneral(textoOcr, nombreArchivo),
+      texto_ocr_completo: textoOcr,
+    },
+  };
+
+  await registrarLogEjecucion({
+    flujo: 'VISION_DOCUMENTO_BOVEDA',
+    disparador: 'POST /api/vision/procesar-formulario',
+    actor: usuarioId,
+    estado: 'REINTENTO',
+    datos_entrada: { nombreArchivo, mimeType, tamanoBytes: fileBuffer.length },
+    datos_salida: { modelo: resultado.modelo_utilizado, confianza: resultado.score_confianza },
+    mensaje_error: motivo ? String(motivo).slice(0, 300) : null,
+    tiempo_ms: Date.now() - inicioMs,
+  });
+
+  return resultado;
+}
+
+export async function analizarDocumentoGeneralConVision(
+  fileBuffer,
+  mimeType,
+  nombreArchivo = 'documento.pdf',
+  usuarioId = 'SISTEMA'
+) {
+  const inicioMs = Date.now();
+
+  if (!fileBuffer || fileBuffer.length === 0) {
+    throw new Error('El archivo proporcionado está vacío.');
+  }
+
+  if (!isGeminiConfigured()) {
+    console.warn('[Vision Service] GEMINI_API_KEY no configurada. Plan B para Bóveda Documental.');
+    return ejecutarPlanBDocumentoGeneral(
+      fileBuffer,
+      mimeType,
+      nombreArchivo,
+      usuarioId,
+      'GEMINI_API_KEY no configurada'
+    );
+  }
+
+  try {
+    const base64Data = fileBuffer.toString('base64');
+
+    const promptDocumentoGeneral = `
+Eres un sistema experto de Visión por Computador e IA Multimodal para la digitalización y clasificación de documentos empresariales generales en la Bóveda Documental de DocuMind.
+Analiza detenidamente la imagen o documento proporcionado (facturas, contratos, cédulas, actas, comprobantes, normativa, soportes generales).
+
+Debes responder ÚNICAMENTE un bloque de código JSON con este esquema exacto:
+{
+  "titulo_sugerido": "Título breve, claro y profesional del documento (máximo 120 caracteres)",
+  "tipo_documento": "Uno de: Contrato, Factura, Documento de Identidad, Acta, Normativa, Soporte General",
+  "entidades_clave": {
+    "emisor": "Empresa, entidad o persona que emite el documento, o null",
+    "receptor": "Empresa, entidad o persona destinataria, o null",
+    "documento_id_o_nit": "NIT, cédula, radicado o identificador visible, o null",
+    "fecha_documento": "Fecha del documento en formato AAAA-MM-DD si es visible, o null",
+    "monto_total": "Monto total visible con su moneda, o null"
+  },
+  "resumen_ejecutivo": "Resumen profesional en español de 2 a 4 oraciones que explique el objeto, las partes y los datos relevantes del documento.",
+  "texto_ocr_completo": "Transcripción completa, fiel y ordenada de todo el texto legible en la imagen o PDF, conservando el orden de lectura.",
+  "score_confianza": 0.92,
+  "advertencias": []
+}
+
+Reglas estrictas:
+1. "score_confianza" es un decimal entre 0.00 y 1.00 que refleja la legibilidad, nitidez e integridad de los datos.
+2. Si la imagen tiene poca luz, inclinación, recortes o texto ilegible, reduce la confianza y agrega advertencias claras.
+3. Si un dato no es visible, usa null y añade una advertencia cuando sea relevante.
+4. "texto_ocr_completo" debe contener toda la transcripción legible, no un resumen ni fragmentos omitidos.
+5. "resumen_ejecutivo" debe ser una redacción propia en español profesional, sin encabezados de plantilla ni separadores.
+6. NO agregues texto conversacional fuera del JSON.
+`;
+
+    const modeloCaliente = getLastWorkingModel();
+    const candidatos = obtenerModelosCandidatosGeneracion();
+    if (candidatos.length === 0) {
+      throw new Error('Todos los modelos multimodales están en cooldown; Plan B inmediato');
+    }
+
+    const resultadoMultimodal = await generarContenidoMultimodalGemini({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: promptDocumentoGeneral },
+            {
+              inlineData: {
+                mimeType: mimeType || 'application/pdf',
+                data: base64Data,
+              },
+            },
+          ],
+        },
+      ],
+      presupuestoMaximoMs: PRESUPUESTO_MULTIMODAL_MS,
+      timeoutPorIntentoMs: TIMEOUT_POR_INTENTO_MS,
+      temperature: 0.2,
+    });
+
+    if (!resultadoMultimodal.texto) {
+      const detalleCircuito = modeloCaliente && isModelInCooldown(modeloCaliente)
+        ? `circuito abierto para ${modeloCaliente}`
+        : 'circuito abierto por presupuesto de latencia';
+      throw new Error(`Ningún modelo multimodal en la nube respondió satisfactoriamente (${detalleCircuito})`);
+    }
+
+    const jsonMatch = resultadoMultimodal.texto.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('La respuesta de visión no devolvió un JSON legible');
+    }
+
+    const parsedData = JSON.parse(jsonMatch[0]);
+    const scoreGlobal = normalizarScoreConfianzaGeneral(parsedData.score_confianza);
+    const entidades = parsedData.entidades_clave && typeof parsedData.entidades_clave === 'object'
+      ? parsedData.entidades_clave
+      : {};
+    const textoOcr = typeof parsedData.texto_ocr_completo === 'string'
+      ? parsedData.texto_ocr_completo.trim()
+      : '';
+    const tituloSugerido = typeof parsedData.titulo_sugerido === 'string' && parsedData.titulo_sugerido.trim()
+      ? parsedData.titulo_sugerido.trim().slice(0, 160)
+      : `Documento digitalizado: ${nombreArchivo}`;
+    const resumenEjecutivo = typeof parsedData.resumen_ejecutivo === 'string' && parsedData.resumen_ejecutivo.trim()
+      ? parsedData.resumen_ejecutivo.trim()
+      : `Documento "${nombreArchivo}" digitalizado e incorporado a la Bóveda Documental para consulta y trazabilidad.`;
+    const advertencias = Array.isArray(parsedData.advertencias)
+      ? parsedData.advertencias.filter((advertencia) => typeof advertencia === 'string' && advertencia.trim())
+      : [];
+
+    const resultadoFinal = {
+      modelo_utilizado: `Google ${resultadoMultimodal.modelo} Vision (Multimodal)`,
+      es_plan_b: false,
+      score_confianza: scoreGlobal,
+      requiere_revision_humana: scoreGlobal < 0.85 || !textoOcr || advertencias.length > 0,
+      advertencias,
+      datos_documento: {
+        titulo_sugerido: tituloSugerido,
+        tipo_documento: normalizarTipoDocumentoGeneral(parsedData.tipo_documento, textoOcr, nombreArchivo),
+        entidades_clave: {
+          emisor: entidades.emisor ?? null,
+          receptor: entidades.receptor ?? null,
+          documento_id_o_nit: entidades.documento_id_o_nit ?? null,
+          fecha_documento: entidades.fecha_documento ?? null,
+          monto_total: entidades.monto_total ?? null,
+        },
+        resumen_ejecutivo: resumenEjecutivo,
+        texto_ocr_completo: textoOcr,
+      },
+    };
+
+    await registrarLogEjecucion({
+      flujo: 'VISION_DOCUMENTO_BOVEDA',
+      disparador: 'POST /api/vision/procesar-formulario',
+      actor: usuarioId,
+      estado: 'EXITO',
+      datos_entrada: { nombreArchivo, mimeType, tamanoBytes: fileBuffer.length },
+      datos_salida: { modelo: resultadoFinal.modelo_utilizado, confianza: scoreGlobal },
+      tiempo_ms: Date.now() - inicioMs,
+    });
+
+    return resultadoFinal;
+  } catch (err) {
+    console.warn('[Vision Service] Fallo en visión para Bóveda Documental:', err.message, '-> Activando Plan B');
+    return ejecutarPlanBDocumentoGeneral(fileBuffer, mimeType, nombreArchivo, usuarioId, err.message);
   }
 }

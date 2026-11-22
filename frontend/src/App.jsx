@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import Sidebar from './components/Sidebar';
@@ -20,11 +20,22 @@ import TourGuiado from './components/TourGuiado';
 function AppLayout() {
   const [selectedRepo, setSelectedRepo] = useState(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleSelectRepoFromSidebar = (repo, { auto = false } = {}) => {
+    setSelectedRepo(repo);
+    if (auto || !repo) return;
+    if (location.pathname.startsWith('/chat') || location.pathname.startsWith('/ingesta')) {
+      return;
+    }
+    navigate('/ingesta');
+  };
 
   return (
     <div className="flex min-h-screen bg-[var(--color-bg-main)] text-[var(--color-text)]">
       <Sidebar
-        onRepoSelect={setSelectedRepo}
+        onRepoSelect={handleSelectRepoFromSidebar}
         selectedRepo={selectedRepo}
         mobileOpen={mobileNavOpen}
         onMobileClose={() => setMobileNavOpen(false)}

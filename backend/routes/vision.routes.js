@@ -3,7 +3,11 @@ import multer from 'multer';
 import path, { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
-import { procesarFormularioController, descargarArchivoVisionController } from '../controllers/vision.controller.js';
+import {
+  procesarFormularioController,
+  indexarDocumentoVisionController,
+  descargarArchivoVisionController,
+} from '../controllers/vision.controller.js';
 import { verificarTokenOpcional, verificarToken, requireRol } from '../middleware/auth.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -44,6 +48,8 @@ const upload = multer({
 
 // Endpoint de procesamiento de formularios físicos con Visión IA
 router.post('/procesar-formulario', verificarTokenOpcional, upload.single('archivo'), procesarFormularioController);
+
+router.post('/indexar-documento', verificarToken, upload.single('archivo'), indexarDocumentoVisionController);
 
 // Descarga protegida de imágenes procesadas conservadas en /uploads
 router.get(

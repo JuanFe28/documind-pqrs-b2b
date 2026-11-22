@@ -293,6 +293,7 @@ describe('DocuMind — Pruebas de Remediación Prioritaria de Seguridad (Tarea 6
       // 2. Validación de documentos en PostgreSQL para los matches de Pinecone:
       // El documento huérfano ya no existe en PostgreSQL
       dbQuerySpy.mockResolvedValueOnce([]); // SELECT id FROM documentos ... -> vacío
+      dbQuerySpy.mockResolvedValueOnce([]); // Fallback léxico -> sin documentos si se activa con Postgres local encendido
 
       const res = await request(app)
         .post('/api/chat/query')
