@@ -417,6 +417,7 @@ export async function enviarCorreoNotificacion({
         }),
       { maxAttempts: 3, baseDelayMs: 120 }
     );
+    console.info(`[Automation SMTP] Correo enviado (${tipo}) -> ${info.messageId}`);
     return { enviado: true, estado: 'ENVIADA', detalle: `Mensaje aceptado: ${info.messageId}` };
   } catch (error) {
     console.warn(`[Automation SMTP] Error al enviar correo (${tipo}):`, error.message);
@@ -652,7 +653,7 @@ export async function radicarSolicitudNativa(payload, actor = 'PORTAL_PUBLICO') 
         });
 
         await db.query(
-          'SELECT pqrs_registrar_correo(?::uuid, ?, ?, ?)',
+          'SELECT pqrs_registrar_correo(?::uuid, ?::text, ?::text, ?::text)',
           [solicitud.request_id || requestId, 'confirmacion', resCliente.estado, resCliente.detalle]
         ).catch(() => {});
 
@@ -670,7 +671,7 @@ export async function radicarSolicitudNativa(payload, actor = 'PORTAL_PUBLICO') 
           });
 
           await db.query(
-            'SELECT pqrs_registrar_correo(?::uuid, ?, ?, ?)',
+            'SELECT pqrs_registrar_correo(?::uuid, ?::text, ?::text, ?::text)',
             [solicitud.request_id || requestId, 'alerta', resAlerta.estado, resAlerta.detalle]
           ).catch(() => {});
         }
