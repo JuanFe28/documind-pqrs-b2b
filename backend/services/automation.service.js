@@ -652,7 +652,7 @@ export async function radicarSolicitudNativa(payload, actor = 'PORTAL_PUBLICO') 
         });
 
         await db.query(
-          'SELECT pqrs_registrar_correo(?::uuid, $1, $2, $3)',
+          'SELECT pqrs_registrar_correo(?::uuid, ?, ?, ?)',
           [solicitud.request_id || requestId, 'confirmacion', resCliente.estado, resCliente.detalle]
         ).catch(() => {});
 
@@ -670,7 +670,7 @@ export async function radicarSolicitudNativa(payload, actor = 'PORTAL_PUBLICO') 
           });
 
           await db.query(
-            'SELECT pqrs_registrar_correo(?::uuid, $1, $2, $3)',
+            'SELECT pqrs_registrar_correo(?::uuid, ?, ?, ?)',
             [solicitud.request_id || requestId, 'alerta', resAlerta.estado, resAlerta.detalle]
           ).catch(() => {});
         }
